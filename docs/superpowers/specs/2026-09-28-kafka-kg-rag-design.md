@@ -1,7 +1,11 @@
-# Kafka KG-RAG: Graph vs Vector Retrieval on Engineering Mailing Lists — Design
+# Kafka Atlas: Graph vs Vector Retrieval on Engineering Mailing Lists — Design
 
-Date: 2026-09-28
+Date: 2026-09-28 (revised 2026-10-14: Neo4j / pgvector / LangChain / FastAPI /
+GCP / Langfuse stack)
 Status: Draft for review
+
+Stack: Python, Neo4j (AuraDB), Postgres + pgvector (Cloud SQL), LangChain,
+FastAPI, Docker, GCP Cloud Run, Langfuse.
 
 ## 1. Goal and framing
 
@@ -26,12 +30,18 @@ retrieval** against a **plain vector RAG baseline** on **single-hop** and
    split that is evaluated once for the final numbers.
 3. The README reports, for vector baseline, graph + exact-match ER, and graph +
    user ER: retrieval metrics and answer accuracy split by single-hop vs
-   multi-hop, with 95% bootstrap CIs, plus a limitations section.
+   multi-hop, with 95% bootstrap CIs, plus a limitations section. Any headline
+   figure (e.g. "multi-hop recall +N points over the baseline") is taken from
+   the held-out test run, never set in advance.
+4. A FastAPI `/ask` service is deployed on Cloud Run against Cloud SQL and
+   AuraDB, with Langfuse traces for every request.
 
 ### Non-goals
 
-Web UI, real-time ingestion, fine-tuning, publication-grade statistics,
-frameworks that implement ER or retrieval (LlamaIndex PropertyGraph, GraphRAG).
+Web UI, real-time ingestion, fine-tuning, publication-grade statistics, CI/CD
+pipelines, frameworks that implement ER or graph retrieval (LlamaIndex
+PropertyGraph, GraphRAG). LangChain is used only for the vector baseline and
+the shared answer chain.
 
 ## 2. Data
 
@@ -68,10 +78,13 @@ frameworks that implement ER or retrieval (LlamaIndex PropertyGraph, GraphRAG).
 
 ### Storage
 
-SQLite: `emails(id, message_id, thread_id, date, sender_name, sender_address,
-subject, body_clean, kind)`, `threads`, `jira_events`, `documents` (the unified
-retrievable units: human emails/chunks and Jira-event texts, each with a stable
-`doc_id`), `llm_cache`, `failures`.
+Postgres with the pgvector extension — `docker compose` locally, Cloud SQL for
+Postgres in production. Tables: `emails(id, message_id, thread_id, date,
+sender_name, sender_address, subject, body_clean, kind)`, `threads`,
+`jira_events`, `documents` (the unified retrievable units: human emails/chunks
+and Jira-event texts, each with a stable `doc_id`), `llm_cache`, `failures`,
+plus the embedding collection managed by LangChain `PGVector`. Schema changes
+are applied with plain SQL migration files.
 
 ### Dev fixture
 
@@ -148,11 +161,21 @@ jira | llm`) and `confidence`.
   only exact, case-normalized surface strings. Used as an ablation to measure
   what ER contributes.
 
+Entity resolution is pure Python with no database access, so its tests run
+without Docker.
+
 ### Graph build
 
-Resolved mentions, regex/header/Jira edges and LLM relations assemble into a
-NetworkX `MultiDiGraph`, persisted to disk, exposed through a `KnowledgeGraph`
-wrapper (§5).
+Resolved mentions, regex/header/Jira edges and LLM relations are written to
+**Neo4j** — `docker compose` locally, **AuraDB Free** in production — using
+batched `UNWIND … MERGE` with uniqueness constraints on node IDs. A rebuild
+clears and reloads the graph. Edge properties carry the provenance fields
+above. The graph is exposed through a `KnowledgeGraph` wrapper (§5).
+
+Expected size: ~20k nodes, ~100k relationships. AuraDB Free caps node and
+relationship counts; the published caps are verified during setup. If they
+are exceeded, fall back to AuraDB Professional (from $0.09/GB/hour, 1 GB
+minimum, as listed on 2026-10-14).
 
 ## 5. Retrieval and answering
 
@@ -165,9 +188,10 @@ wrapper (§5).
 
 ### Vector baseline (Claude)
 
-One chunk per human email (split at ~500 tokens if longer); one document per
-Jira-event text. Embedded and stored in LanceDB. Top-k by cosine similarity
-until the budget is filled.
+LangChain + pgvector. One chunk per human email (split at ~500 tokens if
+longer); one document per Jira-event text. Embedded into a LangChain `PGVector`
+collection. A thin wrapper takes candidates in cosine-similarity order until
+`budget_tokens` is filled and returns a `RetrievalResult`.
 
 ### Graph retrieval — USER-IMPLEMENTED
 
@@ -175,22 +199,23 @@ until the budget is filled.
 - Signature: `retrieve(question: str, kg: KnowledgeGraph, budget_tokens: int)
   -> RetrievalResult`. `RetrievalResult` also carries a free-form `trace`
   (linked entities, paths walked) used for debugging and write-up examples.
-- `KnowledgeGraph` helpers (optional to use): node lookup by name (exact and
-  fuzzy), neighbors/edges filtered by type and date, edge → source docs,
-  vector search over node names and over document chunks (shared baseline
-  index).
-- Entity linking in the question, traversal strategy and evidence ranking are
-  entirely the user's design.
-- Provided tests:
+- `KnowledgeGraph` (wraps the Neo4j Python driver) helpers, optional to use:
+  node lookup by name (exact and fuzzy), neighbors/edges filtered by type and
+  date, edge → source docs, vector search over node names and over document
+  chunks (shared pgvector index), and raw `cypher(query, params)`.
+- Entity linking in the question, traversal strategy (Python, Cypher, or
+  both) and evidence ranking are entirely the user's design.
+- Provided tests (run against a Neo4j testcontainer loaded with the dev
+  fixture):
   - contract: respects budget; every `doc_id` exists; deterministic.
   - quality (reported, non-blocking marker): gold-source recall within budget on
     `dev_questions.json`, split single-hop / multi-hop.
 
 ### Answer generation (Claude)
 
-One fixed prompt and model for all systems: answer only from the given sources,
-cite `doc_id`s, and state "insufficient information" when the sources do not
-support an answer.
+One LangChain chain (fixed prompt and model) shared by all systems: answer only
+from the given sources, cite `doc_id`s, and state "insufficient information"
+when the sources do not support an answer.
 
 ## 6. Question set and evaluation
 
@@ -251,29 +276,66 @@ for the final report).
 auto-generated markdown tables, and side-by-side retrieval traces for selected
 questions.
 
-## 7. Project structure
+## 7. Serving, deployment and observability
+
+### API (FastAPI)
+
+- `POST /ask {question, system: "vector" | "graph"}` → `{answer, sources:
+  [{doc_id, subject, date, sender, snippet}], trace}`.
+- `GET /health` → status of Postgres and Neo4j; reports explicitly when the
+  AuraDB instance is paused.
+- Both systems are served from the same process using the same retrievers and
+  answer chain as the evaluation.
+
+### Deployment (GCP)
+
+- One Docker image, deployed to **Cloud Run** (scale to zero) with a
+  `scripts/deploy.sh` wrapping `gcloud run deploy`.
+- **Cloud SQL for Postgres** (pgvector enabled) via the Cloud SQL Python
+  connector.
+- **AuraDB Free** for Neo4j, reached over its public `neo4j+s://` URI.
+- API keys and database credentials in **Secret Manager**, mounted as env vars.
+- The batch pipeline (ingest → eval) runs from the developer machine via the
+  CLI against the same cloud databases; only the serving path is deployed.
+- README documents resuming a paused AuraDB instance before a demo.
+
+### Observability (Langfuse)
+
+- Langfuse Cloud (free tier) via its LangChain callback handler and decorator
+  SDK.
+- Traces every LLM call (extraction, drafting, answering, judging), every
+  retrieval call, and every `/ask` request, tagged with `system`,
+  `question_id` (during eval) and `run_id`.
+
+## 8. Project structure
 
 ```
-kafka-kg-rag/
+kafka-atlas/
   pyproject.toml            # uv
   config.yaml
+  docker-compose.yml        # Postgres+pgvector, Neo4j (local dev)
+  Dockerfile
+  migrations/               # SQL
+  scripts/deploy.sh
   src/kgrag/
     ingest/  store/  extract/
     resolve/   interface.py  exact_match.py  resolver.py (USER)
-    graph/
+    graph/     build.py  kg.py (KnowledgeGraph)
     retrieve/  types.py  vector.py  graph_retriever.py (USER)
     answer/  questions/  eval/
+    api/       main.py (FastAPI)
+    observability.py        # Langfuse setup
     cli.py
   tests/  tests/fixtures/
-  data/      # gitignored
+  data/      # gitignored: raw mbox, LLM cache exports
   results/
 ```
 
 Stages are separate CLI commands: `ingest → extract → resolve → build → index →
-questions → eval → report`. Each reads prior outputs from disk and is
+questions → eval → report`. Each reads prior outputs from the databases and is
 idempotent, so changing the resolver requires only `resolve → build → eval`.
 
-## 8. Error handling
+## 9. Error handling
 
 - API calls: retry with exponential backoff; failed batch items re-queued.
 - LLM outputs: schema-validated; one retry on failure, then logged to
@@ -281,22 +343,28 @@ idempotent, so changing the resolver requires only `resolve → build → eval`.
 - Malformed emails: logged and skipped; counts shown in the report.
 - Cost guard: `extract` and `questions` print a token-cost estimate and require
   confirmation above a configurable threshold.
+- `/ask`: returns 503 with a clear message when a database is unreachable or
+  AuraDB is paused; 400 on an unknown `system`.
 
-## 9. Testing
+## 10. Testing
 
 - Unit tests for Claude-written components: parsing, cleaning, regex, Jira
   parser, metrics, bootstrap.
-- Contract and quality tests for the user's resolver and retriever (§4, §5).
+- Contract and quality tests for the user's resolver (pure Python) and
+  retriever (Neo4j testcontainer) (§4, §5).
+- API tests with FastAPI's test client against the local `docker compose`
+  stack.
 - End-to-end smoke test on the dev fixture using recorded LLM and embedding
-  responses: runs offline, free, in seconds.
+  responses against the local `docker compose` stack: no API spend, runs in
+  under a minute.
 
-## 10. Stretch goals
+## 11. Stretch goals
 
 - Run the same pipeline on the MultiHop-RAG benchmark as an external check.
-- One-way export of the graph to Neo4j for visualization.
 - Hybrid (BM25 + vector) baseline as a stronger comparison point.
+- CI (GitHub Actions) running unit and contract tests.
 
-## 11. Known limitations (to carry into the README)
+## 12. Known limitations (to carry into the README)
 
 - Single corpus, single time window; results may not generalize.
 - Questions are LLM-drafted from header/regex-linked evidence, so they
