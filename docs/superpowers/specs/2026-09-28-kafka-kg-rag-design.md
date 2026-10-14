@@ -101,6 +101,11 @@ JSON under `tests/fixtures/`, with:
 Hosted APIs for all model steps. Model IDs live in `config.yaml` and are recorded
 in every results file.
 
+Embeddings are called through LangChain's `VoyageAIEmbeddings`
+(`langchain-voyageai`). A single instance is shared by the `PGVector` store
+(indexing and baseline queries) and by the `KnowledgeGraph` vector-search
+helpers, so both systems use identical embeddings.
+
 | Step | Model |
 |---|---|
 | Extraction | `claude-sonnet-5-5` (via Message Batches API) |
