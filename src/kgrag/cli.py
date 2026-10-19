@@ -135,7 +135,12 @@ def _parse_counts(spec: str) -> dict[str, int]:
     try:
         for part in spec.split(","):
             name, value = part.split("=")
-            counts[name.strip()] = int(value)
+            name = name.strip()
+            if name in counts:
+                raise typer.BadParameter(f"duplicate question type: {name}")
+            counts[name] = int(value)
+            if counts[name] < 0:
+                raise typer.BadParameter(f"negative count for {name}")
     except ValueError:
         raise typer.BadParameter("expected type=N,type=N,...") from None
     unknown = set(counts) - set(QUESTION_TYPES)
@@ -173,6 +178,10 @@ def questions_draft(
                 raise typer.Exit(2)
             if not typer.confirm("Proceed?", default=False):
                 raise typer.Exit(1)
-        typer.echo(draft_questions(conn, wanted, seed=seed, oversample=oversample))
+        stats = draft_questions(conn, wanted, seed=seed, oversample=oversample)
+        typer.echo(stats)
+        if stats.failed and not stats.drafted:
+            typer.echo("Every draft attempt failed; see the failures table.", err=True)
+            raise typer.Exit(1)
     finally:
         conn.close()

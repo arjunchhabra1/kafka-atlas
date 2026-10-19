@@ -51,6 +51,9 @@ class QuestionRow(BaseModel):
     split: str | None = None
     draft_model: str | None = None
     prompt_version: str | None = None
+    link: str | None = None
+    origin: Literal["sampled", "relabeled"] | None = None
+    key_terms: list[str] | None = None
     reviewed_at: datetime | None = None
 
 
@@ -256,9 +259,10 @@ def insert_question(conn: psycopg.Connection, q: QuestionRow) -> bool:
     """Insert a question; False when its id already exists (existing rows are never touched)."""
     cur = conn.execute(
         "insert into questions (id, type, question, answer, gold_doc_ids, status, split, "
-        "draft_model, prompt_version, reviewed_at) values (%(id)s, %(type)s, %(question)s, "
+        "draft_model, prompt_version, link, origin, key_terms, reviewed_at) values "
+        "(%(id)s, %(type)s, %(question)s, "
         "%(answer)s, %(gold_doc_ids)s, %(status)s, %(split)s, %(draft_model)s, "
-        "%(prompt_version)s, %(reviewed_at)s) on conflict (id) do nothing",
+        "%(prompt_version)s, %(link)s, %(origin)s, %(key_terms)s, %(reviewed_at)s) on conflict (id) do nothing",
         q.model_dump(),
     )
     return cur.rowcount == 1

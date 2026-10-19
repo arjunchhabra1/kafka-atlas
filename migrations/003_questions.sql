@@ -8,5 +8,8 @@ create table questions (
   split text,
   draft_model text,
   prompt_version text,
+  link text,
+  origin text check (origin in ('sampled','relabeled')),
+  key_terms text[],
   reviewed_at timestamptz
 );

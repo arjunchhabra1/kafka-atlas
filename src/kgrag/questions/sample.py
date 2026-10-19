@@ -5,8 +5,11 @@ touch the knowledge graph, so the question set is not biased toward the graph sy
 """
 
 import random
+import re
+from collections.abc import Iterator
 from dataclasses import dataclass
 from datetime import datetime, timedelta
+from itertools import islice
 from typing import Literal
 
 import psycopg
@@ -20,6 +23,8 @@ MIN_DOC_TOKENS = 40
 HUMAN_SHARE = 0.7  # single-hop: share of human email chunks vs Jira docs
 MIN_TEMPORAL_GAP = timedelta(days=7)
 LINKABLE_KINDS = ("KIP", "JiraTicket")  # releases are too generic to link documents
+MAX_PASSES = 50  # safety cap on shuffled passes over the candidate keys
+STALE_LIMIT = 2  # consecutive passes (or 100 attempts for comparison) with nothing new
 
 
 class EvidenceSet(BaseModel):
@@ -33,7 +38,7 @@ class _Doc:
     doc_id: str
     kind: str  # 'email' | 'jira'
     source_id: str
-    thread: str  # a Jira doc is its own thread
+    thread: str  # all events of one Jira ticket count as a single thread
     date: datetime
     ids: frozenset[str]  # canonical KIP / ticket ids
 
@@ -80,7 +85,8 @@ def _load_docs(conn: psycopg.Connection) -> list[_Doc]:
     for email_id, chunks in by_email.items():
         first = min(chunks, key=lambda r: r[3])
         for ident, surfaces in mention_ids.get(email_id, {}).items():
-            hits = [c for c in chunks if any(s in c[4].lower() for s in surfaces)] or [first]
+            pats = [re.compile(rf"(?<!\w){re.escape(s)}(?!\w)", re.I) for s in surfaces]
+            hits = [c for c in chunks if any(p.search(c[4]) for p in pats)] or [first]
             for c in hits:
                 chunk_ids.setdefault(c[0], set()).add(ident)
 
@@ -91,7 +97,7 @@ def _load_docs(conn: psycopg.Connection) -> list[_Doc]:
         if kind == "jira":
             ticket = tickets.get(source_id)
             ids = frozenset({ticket} if ticket else ())
-            thread = f"jira:{doc_id}"
+            thread = f"jira:{ticket or doc_id}"
         else:
             ids = frozenset(chunk_ids.get(doc_id, ()))
         docs.append(_Doc(doc_id, kind, source_id, thread, date, ids))
@@ -110,38 +116,43 @@ def _ordered(docs: list[_Doc]) -> list[str]:
     return [d.doc_id for d in sorted(docs, key=lambda d: (d.date, d.doc_id))]
 
 
-def _collect(keys: list[str], build, n: int, rng: random.Random) -> list[EvidenceSet]:
-    """Try each key (shuffled) up to three passes, keeping distinct sets, until n are built."""
-    out: list[EvidenceSet] = []
+def _rng(seed: int, qtype: str) -> random.Random:
+    """Independent, deterministic random stream per (seed, question type)."""
+    return random.Random(f"{seed}:{qtype}")
+
+
+def _collect(keys: list[str], build, rng: random.Random) -> Iterator[EvidenceSet]:
+    """Yield distinct sets from shuffled passes over keys until passes stop producing new ones."""
     seen: set[frozenset[str]] = set()
-    for _ in range(3):
+    stale = 0
+    for _ in range(MAX_PASSES):
         order = list(keys)
         rng.shuffle(order)
+        fresh = False
         for key in order:
-            if len(out) >= n:
-                return out
             es = build(key)
             if es is not None and frozenset(es.doc_ids) not in seen:
                 seen.add(frozenset(es.doc_ids))
-                out.append(es)
-    return out
+                fresh = True
+                yield es
+        stale = 0 if fresh else stale + 1
+        if stale >= STALE_LIMIT:
+            return
 
 
-def _single_hop(docs: list[_Doc], n: int, rng: random.Random) -> list[EvidenceSet]:
+def _single_hop(docs: list[_Doc], rng: random.Random) -> Iterator[EvidenceSet]:
     pools = {
         "email": [d for d in docs if d.kind == "email"],
         "jira": [d for d in docs if d.kind == "jira"],
     }
-    out = []
-    while len(out) < n and (pools["email"] or pools["jira"]):
+    while pools["email"] or pools["jira"]:
         want = "email" if rng.random() < HUMAN_SHARE else "jira"
         pool = pools[want] or pools["email" if want == "jira" else "jira"]
         d = pool.pop(rng.randrange(len(pool)))
-        out.append(EvidenceSet(type="single_hop", doc_ids=[d.doc_id], link=f"doc:{d.doc_id}"))
-    return out
+        yield EvidenceSet(type="single_hop", doc_ids=[d.doc_id], link=f"doc:{d.doc_id}")
 
 
-def _inference(docs: list[_Doc], n: int, rng: random.Random) -> list[EvidenceSet]:
+def _inference(docs: list[_Doc], rng: random.Random) -> Iterator[EvidenceSet]:
     groups = _by_id(docs)
 
     def build(ident: str) -> EvidenceSet | None:
@@ -156,10 +167,10 @@ def _inference(docs: list[_Doc], n: int, rng: random.Random) -> list[EvidenceSet
             return None
         return EvidenceSet(type="inference", doc_ids=_ordered(picked), link=f"shared:{ident}")
 
-    return _collect(sorted(groups), build, n, rng)
+    return _collect(sorted(groups), build, rng)
 
 
-def _temporal(docs: list[_Doc], n: int, rng: random.Random) -> list[EvidenceSet]:
+def _temporal(docs: list[_Doc], rng: random.Random) -> Iterator[EvidenceSet]:
     groups = _by_id(docs)
 
     def build(ident: str) -> EvidenceSet | None:
@@ -184,10 +195,10 @@ def _temporal(docs: list[_Doc], n: int, rng: random.Random) -> list[EvidenceSet]
                     )
         return None
 
-    return _collect(sorted(groups), build, n, rng)
+    return _collect(sorted(groups), build, rng)
 
 
-def _comparison(docs: list[_Doc], n: int, rng: random.Random) -> list[EvidenceSet]:
+def _comparison(docs: list[_Doc], rng: random.Random) -> Iterator[EvidenceSet]:
     # Docs that mention exactly one id of their kind, grouped by that id.
     single: dict[str, dict[str, list[_Doc]]] = {k: {} for k in LINKABLE_KINDS}
     for d in docs:
@@ -196,47 +207,57 @@ def _comparison(docs: list[_Doc], n: int, rng: random.Random) -> list[EvidenceSe
             if len(of_kind) == 1:
                 single[kind].setdefault(of_kind[0], []).append(d)
     kinds = [k for k in LINKABLE_KINDS if len(single[k]) >= 2]
-    out: list[EvidenceSet] = []
     seen: set[frozenset[str]] = set()
-    for _ in range(n * 20):
-        if len(out) >= n or not kinds:
-            break
+    misses = 0
+    while kinds and misses < 100:
         kind = rng.choice(kinds)
         a, b = sorted(rng.sample(sorted(single[kind]), 2))
         da, db = rng.choice(single[kind][a]), rng.choice(single[kind][b])
         key = frozenset((da.doc_id, db.doc_id))
         if (da.kind, da.source_id) == (db.kind, db.source_id) or key in seen:
+            misses += 1
             continue
+        misses = 0
         seen.add(key)
-        out.append(EvidenceSet(
+        yield EvidenceSet(
             type="comparison", doc_ids=[da.doc_id, db.doc_id], link=f"compare:{a}|{b}"
-        ))
-    return out
+        )
 
 
-def _null(conn: psycopg.Connection, n: int, rng: random.Random) -> list[EvidenceSet]:
+def _null(conn: psycopg.Connection, rng: random.Random) -> Iterator[EvidenceSet]:
     threads = [r[0] for r in conn.execute(
         "select distinct e.thread_id from emails e join documents d "
         "on d.source_kind = 'email' and d.source_id = e.id where e.thread_id is not null "
         "order by e.thread_id"
     )]
     rng.shuffle(threads)
-    return [EvidenceSet(type="null", doc_ids=[], link=f"thread:{t}") for t in threads[:n]]
+    for t in threads:
+        yield EvidenceSet(type="null", doc_ids=[], link=f"thread:{t}")
 
 
-def sample_evidence_sets(
-    conn: psycopg.Connection, qtype: QuestionType, n: int, seed: int
-) -> list[EvidenceSet]:
-    """Up to n evidence sets of the given type; deterministic for a corpus and seed."""
-    rng = random.Random(seed)
+def iter_evidence_sets(
+    conn: psycopg.Connection, qtype: QuestionType, seed: int
+) -> Iterator[EvidenceSet]:
+    """Lazily yield distinct evidence sets until the corpus can build no more.
+
+    Deterministic for a corpus, seed and type; each type has its own random stream.
+    """
+    rng = _rng(seed, qtype)
     if qtype == "null":
-        return _null(conn, n, rng)
+        return _null(conn, rng)
     docs = _load_docs(conn)
     builders = {
         "single_hop": _single_hop, "inference": _inference, "temporal": _temporal,
         "comparison": _comparison,
     }
-    return builders[qtype](docs, n, rng)
+    return builders[qtype](docs, rng)
+
+
+def sample_evidence_sets(
+    conn: psycopg.Connection, qtype: QuestionType, n: int, seed: int
+) -> list[EvidenceSet]:
+    """Up to n evidence sets of the given type (fewer if the corpus cannot build n)."""
+    return list(islice(iter_evidence_sets(conn, qtype, seed), n))
 
 
 def thread_topic(conn: psycopg.Connection, thread_id: str) -> str:

@@ -15,9 +15,10 @@ from kgrag.config import get_settings
 from kgrag.extract.llm import COST_SAFETY_MARGIN
 from kgrag.observability import langchain_callbacks
 from kgrag.questions.sample import (
+    MIN_TEMPORAL_GAP,
     EvidenceSet,
     QuestionType,
-    sample_evidence_sets,
+    iter_evidence_sets,
     thread_topic,
 )
 from kgrag.store.repo import Document, QuestionRow, get_documents, insert_question, log_failure
@@ -25,9 +26,15 @@ from kgrag.tokens import count_tokens
 
 DRAFT_PROMPT_VERSION = "draft-v1"
 MULTI_HOP: tuple[QuestionType, ...] = ("inference", "comparison", "temporal")
-# Single-hop is drafted last so relabeled multi-hop drafts count toward its quota.
-DRAFT_ORDER: tuple[QuestionType, ...] = (*MULTI_HOP, "null", "single_hop")
+# Randomly sampled single-hop goes first so ID-linked relabels never displace it.
+DRAFT_ORDER: tuple[QuestionType, ...] = ("single_hop", *MULTI_HOP, "null")
+NULL_ANSWER = "The mailing list does not contain this information."
+MAX_CONSECUTIVE_FAILURES = 5  # a systemic error (bad key, outage) must not burn the whole corpus
+MAX_KEY_TERMS = 4
+MIN_KEY_TERMS = 2
 AVG_GOLD_DOCS = {"single_hop": 1, "inference": 2.5, "comparison": 2, "temporal": 2.5, "null": 0}
+# Leave-one-out calls: only 3-doc sets (about half of inference/temporal) get one call per doc.
+AVG_LOO_CALLS = {"inference": 1.5, "temporal": 1.5}
 # Assumptions for the cost estimate: a draft is a short JSON object, a filter verdict is tiny.
 EST_DRAFT_OUTPUT_TOKENS = 200
 EST_FILTER_OUTPUT_TOKENS = 30
@@ -64,9 +71,16 @@ TYPE_INSTRUCTIONS: dict[str, str] = {
         "for this mailing list and related to the topic, but whose answer is NOT stated "
         "anywhere on the list (for example a detail nobody discussed, or a decision never "
         "made). Do not invent a premise that is false; ask for something that simply was "
-        "never said."
+        "never said. The answer field is ignored: set it to "
+        f"'{NULL_ANSWER}'. Make the key_terms the words a document answering the question "
+        "would have to contain."
     ),
 }
+OTHERS_PROMPT = (
+    "Decide whether the question can be fully answered from the documents below alone. They "
+    "are only some of the evidence, so answer true only if they by themselves contain "
+    "everything needed to give the reference answer."
+)
 FILTER_PROMPT = (
     "Decide whether the question can be fully answered from the single document below "
     "alone, with no other source. Answer true only if this document by itself contains "
@@ -86,12 +100,16 @@ class SingleSourceSchema(BaseModel):
     answerable: bool
 
 
+class OtherDocsSchema(BaseModel):
+    answerable: bool
+
+
 class DraftQuestion(BaseModel):
     question: str
     answer: str
     type: QuestionType
     gold_doc_ids: list[str]
-    key_terms: list[str]
+    key_terms: list[str] = Field(max_length=MAX_KEY_TERMS)
 
 
 @dataclass
@@ -101,8 +119,12 @@ class DraftStats:
     relabeled: int = 0
     dropped_single_source: int = 0
     dropped_null_present: int = 0
+    dropped_shrunk: int = 0
+    skipped_existing: int = 0
     failed: int = 0
     kept_by_type: dict[str, int] = field(default_factory=dict)
+    kept_by_origin: dict[str, int] = field(default_factory=dict)
+    shortfall: dict[str, int] = field(default_factory=dict)
 
 
 def _default_llm() -> BaseChatModel:
@@ -133,9 +155,13 @@ def draft_question(
     out = _invoke(
         llm, DraftSchema, f"{SYSTEM_PROMPT}\n\n{TYPE_INSTRUCTIONS[es.type]}", context
     )
+    terms = [t.strip() for t in out.key_terms if t.strip()][:MAX_KEY_TERMS]
+    if len(terms) < MIN_KEY_TERMS:
+        raise ValueError(f"draft returned {len(terms)} key terms, need at least {MIN_KEY_TERMS}")
     return DraftQuestion(
-        question=out.question.strip(), answer=out.answer.strip(), type=es.type,
-        gold_doc_ids=list(es.doc_ids), key_terms=[t.strip() for t in out.key_terms if t.strip()],
+        question=out.question.strip(),
+        answer=NULL_ANSWER if es.type == "null" else out.answer.strip(),
+        type=es.type, gold_doc_ids=list(es.doc_ids), key_terms=terms,
     )
 
 
@@ -149,6 +175,21 @@ def single_source_doc(draft: DraftQuestion, docs: list[Document], llm: BaseChatM
         if _invoke(llm, SingleSourceSchema, FILTER_PROMPT, user).answerable:
             return doc.doc_id
     return None
+
+
+def leave_one_out(draft: DraftQuestion, docs: list[Document], llm: BaseChatModel) -> list[Document]:
+    """For a 3-doc set, drop the first doc the other two can answer without; else keep all."""
+    if len(docs) < 3:
+        return docs
+    for k in range(len(docs)):
+        others = docs[:k] + docs[k + 1 :]
+        user = (
+            "Documents:\n\n" + "\n\n".join(_format_doc(d) for d in others)
+            + f"\n\nQuestion: {draft.question}\nReference answer: {draft.answer}"
+        )
+        if _invoke(llm, OtherDocsSchema, OTHERS_PROMPT, user).answerable:
+            return others
+    return docs
 
 
 def answerable_from_single_source(
@@ -173,6 +214,20 @@ def _question_id(d: DraftQuestion) -> str:
     return hashlib.sha256(raw.encode()).hexdigest()[:12]
 
 
+def _already_drafted(conn: psycopg.Connection, es: EvidenceSet) -> bool:
+    """True if questions already hold this evidence (null: same thread link)."""
+    if es.type == "null":
+        row = conn.execute(
+            "select 1 from questions where type = 'null' and link = %s limit 1", (es.link,)
+        ).fetchone()
+    else:
+        row = conn.execute(
+            "select 1 from questions where type = %s and gold_doc_ids @> %s and "
+            "gold_doc_ids <@ %s limit 1", (es.type, es.doc_ids, es.doc_ids),
+        ).fetchone()
+    return row is not None
+
+
 def draft_questions(
     conn: psycopg.Connection,
     counts: dict[QuestionType, int],
@@ -181,7 +236,12 @@ def draft_questions(
     llm: BaseChatModel | None = None,
     oversample: float = 1.3,
 ) -> DraftStats:
-    """Sample, draft, filter and store drafts (status 'draft'); ~oversample x each count."""
+    """Sample, draft, filter and store drafts (status 'draft').
+
+    Each type keeps sampling until ceil(count * oversample) drafts are kept or the corpus runs
+    out of evidence sets. Randomly sampled single-hop goes first; a multi-hop draft that one
+    doc answers alone is relabeled single_hop only into remaining single-hop headroom.
+    """
     stats = DraftStats()
     model = get_settings().models.draft
     targets = {t: math.ceil(c * oversample) for t, c in counts.items() if c > 0}
@@ -189,55 +249,89 @@ def draft_questions(
         return stats
     if llm is None:
         llm = _default_llm()
-    single_quota = targets.get("single_hop", 0)
+    single_target = targets.get("single_hop", 0)
+    single_kept = 0
 
-    def process(es: EvidenceSet) -> None:
-        nonlocal single_quota
-        try:
-            docs = get_documents(conn, es.doc_ids)
-            if len(docs) != len(es.doc_ids):
-                raise ValueError(f"missing documents for {es.doc_ids}")
-            topic = None
-            if es.type == "null":
-                topic = thread_topic(conn, es.link.removeprefix("thread:"))
-            d = draft_question(es, docs, llm, topic=topic)
-            stats.drafted += 1
-            if es.type in MULTI_HOP:
-                alone = single_source_doc(d, docs, llm)
-                if alone is not None:
-                    if single_quota <= 0:
-                        stats.dropped_single_source += 1
-                        return
-                    d = d.model_copy(update={"type": "single_hop", "gold_doc_ids": [alone]})
-                    single_quota -= 1
-                    stats.relabeled += 1
-            elif es.type == "null" and not null_question_absent(d, conn):
+    def store(d: DraftQuestion, es: EvidenceSet, origin: str) -> None:
+        row = QuestionRow(
+            id=_question_id(d), type=d.type, question=d.question, answer=d.answer,
+            gold_doc_ids=d.gold_doc_ids, status="draft", draft_model=model,
+            prompt_version=DRAFT_PROMPT_VERSION, link=es.link, origin=origin,
+            key_terms=d.key_terms,
+        )
+        if insert_question(conn, row):
+            stats.kept += 1
+            stats.kept_by_type[d.type] = stats.kept_by_type.get(d.type, 0) + 1
+            stats.kept_by_origin[origin] = stats.kept_by_origin.get(origin, 0) + 1
+        conn.commit()
+
+    def process(es: EvidenceSet) -> bool:
+        """Draft and filter one set; True when it counts toward its own type's target."""
+        nonlocal single_kept
+        docs = get_documents(conn, es.doc_ids)
+        if len(docs) != len(es.doc_ids):
+            raise ValueError(f"missing documents for {es.doc_ids}")
+        topic = None
+        if es.type == "null":
+            topic = thread_topic(conn, es.link.removeprefix("thread:"))
+        d = draft_question(es, docs, llm, topic=topic)
+        stats.drafted += 1
+        if es.type == "single_hop":
+            store(d, es, "sampled")
+            single_kept += 1
+            return True
+        if es.type == "null":
+            if not null_question_absent(d, conn):
                 stats.dropped_null_present += 1
-                return
-            row = QuestionRow(
-                id=_question_id(d), type=d.type, question=d.question, answer=d.answer,
-                gold_doc_ids=d.gold_doc_ids, status="draft", draft_model=model,
-                prompt_version=DRAFT_PROMPT_VERSION,
-            )
-            if insert_question(conn, row):
-                stats.kept += 1
-                stats.kept_by_type[d.type] = stats.kept_by_type.get(d.type, 0) + 1
-            conn.commit()
-        except Exception as exc:  # noqa: BLE001 - one bad draft must not lose the others
-            conn.rollback()
-            log_failure(conn, "draft", es.link, f"{type(exc).__name__}: {exc}")
-            conn.commit()
-            stats.failed += 1
+                return False
+            store(d, es, "sampled")
+            return True
+        alone = single_source_doc(d, docs, llm)
+        if alone is not None:
+            if single_kept >= single_target:
+                stats.dropped_single_source += 1
+                return False
+            stats.relabeled += 1
+            single_kept += 1
+            store(d.model_copy(update={"type": "single_hop", "gold_doc_ids": [alone]}),
+                  es, "relabeled")
+            return False
+        kept_docs = leave_one_out(d, docs, llm)
+        if len(kept_docs) < len(docs):
+            dates = [x.date for x in kept_docs]
+            if es.type == "temporal" and max(dates) - min(dates) < MIN_TEMPORAL_GAP:
+                stats.dropped_shrunk += 1
+                return False
+            d = d.model_copy(update={"gold_doc_ids": [x.doc_id for x in kept_docs]})
+        store(d, es, "sampled")
+        return True
 
     for qtype in DRAFT_ORDER:
-        if qtype not in targets:
+        target = targets.get(qtype)
+        if target is None:
             continue
-        n = targets[qtype]
-        if qtype == "single_hop":
-            n = max(0, n - stats.relabeled)  # relabeled multi-hop drafts already fill slots
-        for es in sample_evidence_sets(conn, qtype, n, seed):
-            process(es)
-    log.info("drafted %d, single-hop slots filled by relabels: %d", stats.drafted, stats.relabeled)
+        kept = failures = 0
+        for es in iter_evidence_sets(conn, qtype, seed):
+            if kept >= target or failures >= MAX_CONSECUTIVE_FAILURES:
+                break
+            if _already_drafted(conn, es):
+                stats.skipped_existing += 1
+                continue
+            try:
+                counted = process(es)
+                failures = 0
+            except Exception as exc:  # noqa: BLE001 - one bad draft must not lose the others
+                conn.rollback()
+                log_failure(conn, "draft", es.link, f"{type(exc).__name__}: {exc}")
+                conn.commit()
+                stats.failed += 1
+                failures += 1
+                continue
+            kept += counted
+        if kept < target:
+            stats.shortfall[qtype] = target - kept
+            log.warning("%s: kept %d of %d drafts (ran out of evidence or failing)",
+                        qtype, kept, target)
     return stats
 
 
@@ -262,7 +356,10 @@ def estimate_draft_cost_usd(
         in_tok += n * (draft_overhead + max(docs, 1) * avg_tokens)
         out_tok += n * EST_DRAFT_OUTPUT_TOKENS
         if qtype in MULTI_HOP:
+            # one single-doc call per gold doc, plus leave-one-out calls on 3-doc sets
             filters = n * docs
             in_tok += filters * (filter_overhead + avg_tokens + 100)
-            out_tok += filters * EST_FILTER_OUTPUT_TOKENS
+            loo = n * AVG_LOO_CALLS.get(qtype, 0)
+            in_tok += loo * (filter_overhead + 2 * avg_tokens + 100)
+            out_tok += (filters + loo) * EST_FILTER_OUTPUT_TOKENS
     return (in_tok * price.input + out_tok * price.output) / 1_000_000 * COST_SAFETY_MARGIN
