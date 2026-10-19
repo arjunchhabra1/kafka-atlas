@@ -37,12 +37,29 @@ KAFKA_RELEASE_LINES = frozenset(
     | {(4, 0), (4, 1), (4, 2)}
 )
 
+# Names of third-party software whose version numbers collide with Kafka lines (ZooKeeper
+# 3.4.x, Scala 2.x, ...). A version preceded by one of these (within 2 words) is not a Release.
+THIRD_PARTY_NAMES = frozenset(
+    "zookeeper zk scala java jdk jre jvm gradle maven jackson netty jetty log4j log4j2 slf4j "
+    "rocksdb junit mockito plugin python go node docker ubuntu debian centos spring guava "
+    "protobuf grpc zstd lz4 snappy".split()
+)
+
 _MAX_WORDS_BETWEEN = 3
 _WINDOW = _MAX_WORDS_BETWEEN + 1  # keyword may be this many tokens away (3 between)
 
 
 def _is_keyword(token: str) -> bool:
     return _KEYWORD.fullmatch(token.strip(".,;:!?()[]{}<>\"'`*_")) is not None
+
+
+def _after_third_party_name(text: str, start: int) -> bool:
+    """True if one of the 2 words before `start` is (or is hyphen-joined to) a third-party name."""
+    for token in text[max(0, start - 200) : start].split()[-2:]:
+        for part in re.split(r"[-_/]", token.strip(".,;:!?()[]{}<>\"'`*")):
+            if part.lower() in THIRD_PARTY_NAMES:
+                return True
+    return False
 
 
 def _has_release_context(text: str, start: int, end: int) -> bool:
@@ -65,6 +82,8 @@ def extract_ids(text: str) -> list[IdMention]:
     for m in _RELEASE.finditer(text):
         major, minor = m.group(0).split(".")[:2]
         known_line = bool(m.group(1)) and (int(major), int(minor)) in KAFKA_RELEASE_LINES
+        if _after_third_party_name(text, m.start()):
+            continue
         if known_line or _has_release_context(text, m.start(), m.end()):
             found.add((m.start(), m.end(), "Release", m.group(0)))
     return [IdMention(kind=k, id=i, span=(s, e)) for s, e, k, i in sorted(found)]

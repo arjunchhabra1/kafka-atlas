@@ -114,3 +114,23 @@ def test_bare_xyz_needs_known_release_line():
 def test_keyword_context_bypasses_release_line_whitelist():
     assert ids("the 5.1 release", "Release") == ["5.1"]
     assert ids("version 5.1.2", "Release") == ["5.1.2"]
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "ZooKeeper 3.4.13",
+        "zookeeper-3.4.13",
+        "scala-library 2.13.10",
+        "sbt plugin 2.4.0",
+        "Scala version 2.13.1",
+    ],
+)
+def test_third_party_versions_rejected(text):
+    assert ids(text, "Release") == []
+
+
+def test_kafka_versions_still_match_near_other_words():
+    assert ids("Kafka 3.7.0", "Release") == ["3.7.0"]
+    assert ids("Kafka version 3.7.0", "Release") == ["3.7.0"]
+    assert ids("upgrade to 3.7.0", "Release") == ["3.7.0"]
