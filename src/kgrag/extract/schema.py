@@ -2,7 +2,7 @@
 
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict
 
 MentionType = Literal["Person", "Component", "KIP", "JiraTicket", "Release"]
 RelationType = Literal[
@@ -51,7 +51,7 @@ class RawRelation(BaseModel):
     target: str
     vote_value: Literal[1, 0, -1] | None
     binding: bool | None
-    confidence: float = Field(ge=0, le=1)
+    confidence: float  # clamped to [0, 1] by parse_response
 
 
 class RawExtraction(BaseModel):

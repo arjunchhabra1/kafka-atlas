@@ -1,9 +1,12 @@
 """LLM extraction: request building, response parsing, batch runner, cache."""
 
 import json
+import logging
+import math
 import time
 from collections.abc import Callable
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any
 
 import psycopg
@@ -27,6 +30,11 @@ MAX_TOKENS = 8000
 # Assumption: a typical response (a handful of mentions + relations as JSON) is ~600 tokens.
 EST_OUTPUT_TOKENS = 600
 # Fixed per-request input: system prompt plus the schema the API injects. Computed once.
+# Multiplier on the estimate: covers thinking tokens, API header tokens and tokenizer
+# differences (we count with cl100k_base). Task 8's pilot calibrates it from stored usage.
+COST_SAFETY_MARGIN = 1.3
+RETRYABLE_BATCH_ERRORS = frozenset({"api_error", "overloaded_error", "rate_limit_error"})
+log = logging.getLogger(__name__)
 PROMPT_OVERHEAD_TOKENS = count_tokens(SYSTEM_PROMPT + json.dumps(EXTRACTION_SCHEMA))
 
 __all__ = [
@@ -74,8 +82,10 @@ def build_request(email: EmailRow, thread_subject: str) -> dict[str, Any]:
 
 
 def _as_dict(message: Any) -> dict[str, Any]:
+    if hasattr(message, "to_dict"):
+        return message.to_dict()
     if hasattr(message, "model_dump"):
-        return message.model_dump()
+        return message.model_dump(mode="json")
     return message
 
 
@@ -122,7 +132,7 @@ def parse_response(email_id: str, message: Any) -> ExtractionResult:
                 target_mention_id=ids[r.target],
                 vote_value=r.vote_value,
                 binding=r.binding,
-                confidence=r.confidence,
+                confidence=min(1.0, max(0.0, r.confidence)),
             )
             for r in raw.relations
         ],
@@ -136,6 +146,7 @@ def estimate_cost_usd(n_emails: int, avg_tokens: int, model: str, *, batch: bool
         n_emails * (avg_tokens + PROMPT_OVERHEAD_TOKENS) * price.input
         + n_emails * EST_OUTPUT_TOKENS * price.output
     ) / 1_000_000
+    cost *= COST_SAFETY_MARGIN
     return cost * s.batch_discount if batch else cost
 
 
@@ -145,18 +156,22 @@ def _create(client: Any, params: dict[str, Any]) -> Any:
 
 
 @traced("extract")
-def _run_batch(
-    client: Any, requests: list[dict[str, Any]], poll_interval: float, sleep: Callable[[float], None]
-) -> dict[str, Any]:
-    """Submit, poll until ended, return {custom_id: message} for succeeded items."""
-    batch = client.messages.batches.create(requests=requests)
-    while client.messages.batches.retrieve(batch.id).processing_status != "ended":
-        sleep(poll_interval)
-    out: dict[str, Any] = {}
-    for item in client.messages.batches.results(batch.id):
-        if item.result.type == "succeeded":
-            out[item.custom_id] = item.result.message
-    return out
+def _trace_batch(batch_id: str, n_requests: int) -> None:
+    """Langfuse observation carrying only batch metadata, not request bodies."""
+
+
+def _batch_dir() -> Path:
+    return get_settings().data_dir / "batches"
+
+
+def _batch_path(batch_id: str) -> Path:
+    return _batch_dir() / f"{batch_id}.json"
+
+
+def _error_type(result: Any) -> str | None:
+    err = getattr(result, "error", None)
+    inner = getattr(err, "error", None)
+    return getattr(inner, "type", None) or getattr(err, "type", None)
 
 
 def _store(conn: psycopg.Connection, email_id: str, model: str, message: dict[str, Any]) -> None:
@@ -168,13 +183,21 @@ def _store(conn: psycopg.Connection, email_id: str, model: str, message: dict[st
     )
 
 
-def _thread_subjects(emails: list[EmailRow]) -> dict[str, str]:
-    """Thread subject = subject of the earliest email of the thread among those given."""
+def _thread_subjects(conn: psycopg.Connection, emails: list[EmailRow]) -> dict[str, str]:
+    """threads.subject from the DB; fall back to the earliest given email's subject."""
+    ids = sorted({e.thread_id for e in emails})
+    subjects = {
+        tid: subj
+        for tid, subj in conn.execute(
+            "select thread_id, subject from threads where thread_id = any(%s)", (ids,)
+        )
+        if subj is not None
+    }
     first: dict[str, EmailRow] = {}
     for e in emails:
         if e.thread_id not in first or e.date < first[e.thread_id].date:
             first[e.thread_id] = e
-    return {t: e.subject for t, e in first.items()}
+    return {t: subjects.get(t, first[t].subject) for t in ids}
 
 
 def run_extraction(
@@ -185,6 +208,8 @@ def run_extraction(
     batch: bool = True,
     poll_interval: float = 30.0,
     sleep: Callable[[float], None] = time.sleep,
+    resume_batch_id: str | None = None,
+    max_sync_retries: int | None = None,
 ) -> ExtractionStats:
     model = get_settings().models.extract
     stats = ExtractionStats()
@@ -200,40 +225,77 @@ def run_extraction(
     if not todo:
         return stats
 
-    subjects = _thread_subjects(emails)
+    subjects = _thread_subjects(conn, todo)
     params = {e.id: build_request(e, subjects[e.thread_id]) for e in todo}
+    by_id = {e.id: e for e in todo}
 
-    # email id -> validated raw message dict
-    good: dict[str, dict[str, Any]] = {}
+    def accept(email_id: str, msg: Any) -> bool:
+        """Validate and cache one response; False when it is unparseable."""
+        dumped = _as_dict(msg)
+        try:
+            parse_response(email_id, dumped)
+        except ExtractionError:
+            return False
+        _store(conn, email_id, model, dumped)
+        stats.done += 1
+        return True
+
+    def fail(email_id: str, error: str) -> None:
+        log_failure(conn, "extract", email_id, error)
+        stats.failed += 1
+
     retry: list[EmailRow] = []
     if batch:
-        # custom_id must match [A-Za-z0-9_-]{1,64}; email ids may not, so use the index.
-        requests = [{"custom_id": f"e{i}", "params": params[e.id]} for i, e in enumerate(todo)]
-        results = _run_batch(client, requests, poll_interval, sleep)
-        for i, e in enumerate(todo):
-            msg = results.get(f"e{i}")
-            try:
-                if msg is None:
-                    raise ExtractionError("batch item did not succeed")
-                dumped = _as_dict(msg)
-                parse_response(e.id, dumped)
-                good[e.id] = dumped
-            except ExtractionError:
-                retry.append(e)
+        if resume_batch_id:
+            batch_id = resume_batch_id
+            path = _batch_path(batch_id)
+            if not path.exists():
+                raise FileNotFoundError(f"no custom_id mapping for batch {batch_id}: {path}")
+            mapping: dict[str, str] = json.loads(path.read_text())
+        else:
+            # custom_id must match [A-Za-z0-9_-]{1,64}; email ids may not, so use the index.
+            mapping = {f"e{i}": e.id for i, e in enumerate(todo)}
+            requests = [{"custom_id": cid, "params": params[eid]} for cid, eid in mapping.items()]
+            batch_id = client.messages.batches.create(requests=requests).id
+            _batch_dir().mkdir(parents=True, exist_ok=True)
+            _batch_path(batch_id).write_text(json.dumps(mapping))
+            log.info("submitted extraction batch %s (%d requests)", batch_id, len(requests))
+        _trace_batch(batch_id, len(mapping))
+        while client.messages.batches.retrieve(batch_id).processing_status != "ended":
+            sleep(poll_interval)
+
+        seen: set[str] = set()
+        for item in client.messages.batches.results(batch_id):
+            eid = mapping.get(item.custom_id)
+            if eid not in by_id:
+                continue
+            seen.add(eid)
+            res = item.result
+            if res.type == "succeeded":
+                if not accept(eid, res.message):
+                    retry.append(by_id[eid])
+            elif res.type == "errored" and _error_type(res) not in RETRYABLE_BATCH_ERRORS:
+                fail(eid, f"batch item errored: {_error_type(res)}")
+            else:  # expired, canceled, or retryable error
+                retry.append(by_id[eid])
+        retry += [e for e in todo if e.id not in seen and e.id in mapping.values()]
+        conn.commit()  # paid results are durable before any retry can raise
+        cap = max_sync_retries
+        if cap is None:
+            cap = max(20, math.ceil(0.02 * len(todo)))
+        for e in retry[cap:]:
+            fail(e.id, "retry cap reached")
+        retry = retry[:cap]
     else:
         retry = todo
 
     for e in retry:
         try:
-            dumped = _as_dict(_create(client, params[e.id]))
-            parse_response(e.id, dumped)
-            good[e.id] = dumped
-        except Exception as exc:  # noqa: BLE001 - any API/parse error is a per-item failure
-            log_failure(conn, "extract", e.id, f"{type(exc).__name__}: {exc}")
-            stats.failed += 1
-
-    for eid, dumped in good.items():
-        _store(conn, eid, model, dumped)
-    stats.done = len(good)
+            msg = _create(client, params[e.id])
+            if not accept(e.id, msg):
+                fail(e.id, "ExtractionError: unparseable response after retry")
+        except Exception as exc:  # noqa: BLE001 - any API error is a per-item failure
+            fail(e.id, f"{type(exc).__name__}: {exc}")
+        conn.commit()
     conn.commit()
     return stats
