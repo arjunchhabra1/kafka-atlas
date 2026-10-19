@@ -22,6 +22,11 @@ class ModelConfig(BaseModel):
     embed: str
 
 
+class ModelPrice(BaseModel):
+    input: float
+    output: float
+
+
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
         env_prefix="KGRAG_", env_nested_delimiter="__", yaml_file=CONFIG_PATH
@@ -36,6 +41,8 @@ class Settings(BaseSettings):
     chunk_tokens: int = 500
     cost_guard_usd: float = 5.0
     prompt_versions: dict[str, str] = {}
+    pricing: dict[str, ModelPrice] = {}
+    batch_discount: float = 0.5
     data_dir: Path = Path("data")
 
     @classmethod
