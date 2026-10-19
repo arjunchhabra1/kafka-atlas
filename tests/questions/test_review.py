@@ -129,7 +129,7 @@ def test_edit_invalid_then_reedit(db):
         if len(seen) == 1:
             data["gold_doc_ids"] = ["nope"]
         else:
-            data["gold_doc_ids"] = ["d1"]
+            data.update(gold_doc_ids=["d1"], question="Fixed?")
         return yaml.safe_dump(data)
 
     out = run(db, "erq", editor=editor)  # r = re-open editor after error
@@ -171,3 +171,36 @@ def test_progress_counts(db):
     p = progress(db)
     assert p["single_hop"] == {"kept": 1, "edited": 0, "dropped": 1, "remaining": 1}
     assert p["inference"]["remaining"] == 1
+
+
+def test_unchanged_edit_is_cancel(db):
+    out = run(db, "ekq", editor=lambda t: t)
+    assert "No changes" in out and status(db)["a1"] == "kept"
+
+
+def test_edit_strips_text(db):
+    def editor(text):
+        return yaml.safe_dump({**yaml.safe_load(text), "question": "  Padded?  \n"})
+
+    run(db, "eq", editor=editor)
+    assert db.execute("select question from questions where id='a1'").fetchone()[0] == "Padded?"
+
+
+def test_duplicate_gold_ids_rejected(db):
+    inf = _q("i", "inference", ("d1", "d2"))
+    err = validate_edit(db, inf, {"question": "q?", "answer": "a", "gold_doc_ids": ["d1", "d1"]})
+    assert "duplicate" in err and "d1" in err
+
+
+def test_emoji_shortcodes_survive(db):
+    db.execute("update questions set question = 'is :warning: shown?' where id='a1'")
+    db.commit()
+    assert ":warning:" in run(db, "q")
+
+
+def test_missing_editor_binary_cancels(monkeypatch, capsys):
+    from kgrag.questions.review import external_editor
+
+    monkeypatch.setenv("EDITOR", "/nonexistent/editor-xyz")
+    assert external_editor("x") is None
+    assert "Could not run editor" in capsys.readouterr().err

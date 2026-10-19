@@ -45,7 +45,11 @@ def external_editor(text: str) -> str | None:
         path = Path(tmp) / "question.yaml"
         path.write_text(text)
         cmd = shlex.split(os.environ.get("EDITOR") or "vi")
-        if subprocess.run([*cmd, str(path)]).returncode != 0:
+        try:
+            if subprocess.run([*cmd, str(path)]).returncode != 0:
+                return None
+        except OSError as exc:
+            print(f"Could not run editor {cmd[0]!r}: {exc}", file=sys.stderr)
             return None
         return path.read_text()
 
@@ -72,12 +76,17 @@ def validate_edit(conn: psycopg.Connection, q: QuestionRow, data: object) -> str
     if not isinstance(data, dict):
         return "the file must be a YAML mapping with question, answer and gold_doc_ids"
     question, answer, gold = data.get("question"), data.get("answer"), data.get("gold_doc_ids")
+    question = question.strip() if isinstance(question, str) else question
+    answer = answer.strip() if isinstance(answer, str) else answer
     if not isinstance(question, str) or not question.strip():
         return "question must be non-empty"
     if not isinstance(answer, str) or not answer.strip():
         return "answer must be non-empty"
     if not isinstance(gold, list) or not all(isinstance(g, str) for g in gold):
         return "gold_doc_ids must be a list of doc ids"
+    dupes = sorted({g for g in gold if gold.count(g) > 1})
+    if dupes:
+        return f"duplicate gold doc ids: {', '.join(dupes)}"
     if q.type == "single_hop" and len(gold) != 1:
         return "single_hop needs exactly 1 gold doc id"
     if q.type == "null" and gold:
@@ -119,7 +128,7 @@ def _doc_block(d: Document) -> str:
 
 def render(conn: psycopg.Connection, q: QuestionRow, console: Console) -> None:
     def p(s: str = "") -> None:
-        console.print(s, markup=False, highlight=False)
+        console.print(s, markup=False, highlight=False, emoji=False)
 
     p("\n" + "=" * 80)
     for t, c in progress(conn).items():
@@ -149,7 +158,7 @@ def _edit(
     while True:
         edited = editor(text)
         if edited is None:
-            console.print("Editor did not save; edit cancelled.", markup=False)
+            console.print("Editor did not save; edit cancelled.", markup=False, emoji=False)
             return False
         text = edited
         try:
@@ -158,10 +167,15 @@ def _edit(
         except yaml.YAMLError as exc:
             error = f"invalid YAML: {exc}"
         if error is None:
-            decide(conn, q.id, "edited", data)
+            fields = {"question": data["question"].strip(), "answer": data["answer"].strip(),
+                      "gold_doc_ids": data["gold_doc_ids"]}
+            if fields == {"question": q.question, "answer": q.answer, "gold_doc_ids": q.gold_doc_ids}:
+                console.print("No changes; edit cancelled.", markup=False, emoji=False)
+                return False
+            decide(conn, q.id, "edited", fields)
             return True
-        console.print(f"Invalid edit: {error}", markup=False, highlight=False)
-        console.print("r re-open editor · c cancel", markup=False)
+        console.print(f"Invalid edit: {error}", markup=False, highlight=False, emoji=False)
+        console.print("r re-open editor · c cancel", markup=False, emoji=False)
         while (k := read()) not in ("r", "c"):
             pass
         if k == "c":
@@ -179,7 +193,7 @@ def review_session(
     console = console or Console()
     drafts = load_drafts(conn, qtype)
     if not drafts:
-        console.print("No drafts left to review.", markup=False)
+        console.print("No drafts left to review.", markup=False, emoji=False)
     for q in drafts:
         render(conn, q, console)
         while True:
@@ -193,9 +207,9 @@ def review_session(
                     render(conn, q, console)
                     continue
             elif key == "q":
-                console.print("Progress saved.", markup=False)
+                console.print("Progress saved.", markup=False, emoji=False)
                 return
             elif key != "s":
                 continue
             break
-    console.print("Session finished.", markup=False)
+    console.print("Session finished.", markup=False, emoji=False)
