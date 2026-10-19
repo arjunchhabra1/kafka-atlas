@@ -26,7 +26,8 @@ create table jira_events (
   date timestamptz,
   status text,
   fix_version text,
-  source_email_id text references emails
+  title text,
+  source_email_id text unique references emails
 );
 
 create table documents (
