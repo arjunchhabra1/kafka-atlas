@@ -27,9 +27,19 @@ def email_id(message_id: str) -> str:
 
 
 def ingest(conn: psycopg.Connection, mbox_paths: list[Path]) -> IngestStats:
+    """Ingest in one transaction: commit on success, roll back and re-raise on any error."""
+    try:
+        return _ingest(conn, mbox_paths)
+    except BaseException:
+        conn.rollback()
+        raise
+
+
+def _ingest(conn: psycopg.Connection, mbox_paths: list[Path]) -> IngestStats:
     """Ingest the given mbox files as one corpus (threading spans all of them).
 
-    Idempotent: emails upsert on id, Jira events are unique per source email, documents are
+    Idempotent: emails and Jira events (one per source email) upsert, events that no longer
+    parse are deleted, documents are
     rebuilt from scratch, and previous `ingest` failures for these files are cleared first so
     re-runs do not duplicate failure rows.
     """
@@ -85,6 +95,7 @@ def ingest(conn: psycopg.Connection, mbox_paths: list[Path]) -> IngestStats:
 
     repo.upsert_threads(conn, threads)
     repo.upsert_emails(conn, rows)
+    repo.delete_stale_jira_events(conn, [r.id for r in rows], [ev.source_email_id for ev in events])
     repo.insert_jira_events(conn, events)
     documents = repo.rebuild_documents(conn, get_settings().chunk_tokens)
     conn.commit()

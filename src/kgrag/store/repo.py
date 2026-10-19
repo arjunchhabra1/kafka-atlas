@@ -103,19 +103,34 @@ def upsert_emails(conn: psycopg.Connection, rows: list[EmailRow]) -> int:
 
 
 def insert_jira_events(conn: psycopg.Connection, events: list[JiraEvent]) -> int:
-    """Insert events (one per source email); returns how many rows were newly inserted."""
+    """Upsert events (one per source email), keeping the serial id; returns rows written."""
     inserted = 0
     with conn.cursor() as cur:
         for e in events:
             cur.execute(
                 "insert into jira_events (ticket, action, actor, date, status, fix_version, "
                 "title, source_email_id) values (%s, %s, %s, %s, %s, %s, %s, %s) "
-                "on conflict (source_email_id) do nothing",
+                "on conflict (source_email_id) do update set ticket = excluded.ticket, "
+                "action = excluded.action, actor = excluded.actor, date = excluded.date, "
+                "status = excluded.status, fix_version = excluded.fix_version, "
+                "title = excluded.title",
                 (e.ticket, e.action, e.actor, e.date, e.status, e.fix_version, e.title,
                  e.source_email_id),
             )
             inserted += cur.rowcount
     return inserted
+
+
+def delete_stale_jira_events(
+    conn: psycopg.Connection, email_ids: list[str], keep_email_ids: list[str]
+) -> int:
+    """Delete events whose source email is in email_ids but is not in keep_email_ids."""
+    cur = conn.execute(
+        "delete from jira_events where source_email_id = any(%s) "
+        "and not (source_email_id = any(%s))",
+        (email_ids, keep_email_ids),
+    )
+    return cur.rowcount
 
 
 def rebuild_documents(conn: psycopg.Connection, chunk_tokens: int) -> int:
