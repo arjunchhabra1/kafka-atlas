@@ -1,0 +1,99 @@
+Return-Path: 
+ <dev-return-144980-archive-asf-public=cust-asf.ponee.io@kafka.apache.org>
+X-Original-To: archive-asf-public@cust-asf.ponee.io
+Delivered-To: archive-asf-public@cust-asf.ponee.io
+Received: from mxout1-ec2-va.apache.org (mxout1-ec2-va.apache.org
+ [3.227.148.255])
+	by mx-eu-03.ponee.io (Postfix) with ESMTPS id CB6A13E838
+	for <archive-asf-public@cust-asf.ponee.io>;
+ Fri,  1 Mar 2024 12:18:07 +0000 (UTC)
+Received: from mail.apache.org (mailgw-he-de.apache.org [116.203.246.181])
+	(using TLSv1.3 with cipher TLS_AES_256_GCM_SHA384 (256/256 bits))
+	(No client certificate requested)
+	by mxout1-ec2-va.apache.org (ASF Mail Server at mxout1-ec2-va.apache.org)
+ with ESMTPS id D208144D9C
+	for <archive-asf-public@cust-asf.ponee.io>;
+ Fri,  1 Mar 2024 12:18:06 +0000 (UTC)
+Received: (qmail 4036700 invoked by uid 998); 1 Mar 2024 12:18:00 -0000
+Mailing-List: contact dev-help@kafka.apache.org; run by ezmlm
+Precedence: bulk
+List-Help: <mailto:dev-help@kafka.apache.org>
+List-Unsubscribe: <mailto:dev-unsubscribe@kafka.apache.org>
+List-Post: <mailto:dev@kafka.apache.org>
+List-Id: <dev.kafka.apache.org>
+Reply-To: dev@kafka.apache.org
+Delivered-To: mailing list dev@kafka.apache.org
+Received: (qmail 4036644 invoked by uid 116); 1 Mar 2024 12:18:00 -0000
+Received: from mailrelay1-he-de.apache.org (HELO mailrelay1-he-de.apache.org)
+ (116.203.21.61)
+ by apache.org (qpsmtpd/0.94) with ESMTP; Fri, 01 Mar 2024 12:18:00 +0000
+Authentication-Results: apache.org; auth=none
+Received: from jira2-he-de.apache.org (unknown [IPv6:2a01:4f8:242:1f49::2])
+	by mailrelay1-he-de.apache.org (ASF Mail Server at
+ mailrelay1-he-de.apache.org) with ESMTPS id 2B3C8417EB
+	for <dev@kafka.apache.org>; Fri,  1 Mar 2024 12:18:00 +0000 (UTC)
+Received: from jira2-he-de.apache.org (localhost.localdomain [127.0.0.1])
+	by jira2-he-de.apache.org (ASF Mail Server at jira2-he-de.apache.org) with
+ ESMTP id 0805FC80287
+	for <dev@kafka.apache.org>; Fri,  1 Mar 2024 12:18:00 +0000 (UTC)
+Date: Fri, 1 Mar 2024 12:18:00 +0000 (UTC)
+From: "Luke Chen (Jira)" <jira@apache.org>
+To: dev@kafka.apache.org
+Message-ID: <JIRA.13563207.1703919903000.30523.1709295480031@Atlassian.JIRA>
+In-Reply-To: <JIRA.13563207.1703919903000@Atlassian.JIRA>
+References: <JIRA.13563207.1703919903000@Atlassian.JIRA>
+ <JIRA.13563207.1703919903428@jira2-he-de.apache.org>
+Subject: [jira] [Resolved] (KAFKA-16071) NPE in
+ testDescribeUnderReplicatedPartitionsWhenReassignmentIsInProgress
+MIME-Version: 1.0
+Content-Type: text/plain; charset=utf-8
+Content-Transfer-Encoding: quoted-printable
+X-JIRA-FingerPrint: 30527f35849b9dde25b450d4833f0394
+
+
+     [ https://issues.apache.org/jira/browse/KAFKA-16071?page=3Dcom.atlassi=
+an.jira.plugin.system.issuetabpanels:all-tabpanel ]
+
+Luke Chen resolved KAFKA-16071.
+-------------------------------
+    Resolution: Fixed
+
+> NPE in testDescribeUnderReplicatedPartitionsWhenReassignmentIsInProgress
+> ------------------------------------------------------------------------
+>
+>                 Key: KAFKA-16071
+>                 URL: https://issues.apache.org/jira/browse/KAFKA-16071
+>             Project: Kafka
+>          Issue Type: Test
+>            Reporter: Luke Chen
+>            Priority: Major
+>              Labels: newbie, newbie++
+>
+> Found in the CI build result.
+> =C2=A0
+> h3. Error Message
+> java.lang.NullPointerException
+> h3. Stacktrace
+> java.lang.NullPointerException at org.apache.kafka.tools.TopicCommandInte=
+grationTest.testDescribeUnderReplicatedPartitionsWhenReassignmentIsInProgre=
+ss(TopicCommandIntegrationTest.java:800) at sun.reflect.NativeMethodAccesso=
+rImpl.invoke0(Native Method) at sun.reflect.NativeMethodAccessorImpl.invoke=
+(NativeMethodAccessorImpl.java:62) at sun.reflect.DelegatingMethodAccessorI=
+mpl.invoke(DelegatingMethodAccessorImpl.java:43) at java.lang.reflect.Metho=
+d.invoke(Method.java:498) at org.junit.platform.commons.util.ReflectionUtil=
+s.invokeMethod(ReflectionUtils.java:728) at org.junit.jupiter.engine.execut=
+ion.MethodInvocation.proceed(MethodInvocation.java:60) at org.junit.jupiter=
+.engine.execution.InvocationInterceptorChain$ValidatingInvocation.proceed(I=
+nvocationInterceptorChain.java:131)
+> =C2=A0
+> =C2=A0
+> https://ci-builds.apache.org/job/Kafka/job/kafka-pr/job/PR-15095/1/testRe=
+port/junit/org.apache.kafka.tools/TopicCommandIntegrationTest/Build___JDK_8=
+_and_Scala_2_12___testDescribeUnderReplicatedPartitionsWhenReassignmentIsIn=
+Progress_String__zk/
+
+
+
+--
+This message was sent by Atlassian Jira
+(v8.20.10#820010)

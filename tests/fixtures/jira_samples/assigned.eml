@@ -1,0 +1,31 @@
+From: Bob Jones (Jira) <jira@apache.org>
+To: dev@kafka.apache.org
+Message-ID: <JIRA.synthetic.assigned.15001@Atlassian.JIRA>
+Date: Tue, 5 Mar 2024 10:15:00 +0000 (UTC)
+Subject: [jira] [Assigned] (KAFKA-15001) Fix consumer rebalance
+Content-Type: text/plain; charset=utf-8
+Content-Transfer-Encoding: 7bit
+
+     [ https://issues.apache.org/jira/browse/KAFKA-15001?page=com.atlassian.jira.plugin.system.issuetabpanels:all-tabpanel ]
+
+Bob Jones reassigned KAFKA-15001:
+---------------------------------
+
+    Assignee: Alice Smith  (was: Bob Jones)
+
+> Fix consumer rebalance
+> ------------------------------------------
+>
+>                 Key: KAFKA-15001
+>                 URL: https://issues.apache.org/jira/browse/KAFKA-15001
+>             Project: Kafka
+>          Issue Type: Bug
+>            Reporter: Someone
+>
+> Description of the issue.
+
+
+
+--
+This message was sent by Atlassian Jira
+(v8.20.10#820010)

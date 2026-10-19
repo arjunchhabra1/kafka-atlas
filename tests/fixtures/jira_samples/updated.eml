@@ -1,0 +1,30 @@
+From: Dan Wu (Jira) <jira@apache.org>
+To: dev@kafka.apache.org
+Message-ID: <JIRA.synthetic.updated.15003@Atlassian.JIRA>
+Date: Tue, 5 Mar 2024 10:15:00 +0000 (UTC)
+Subject: [jira] [Updated] (KAFKA-15003) Improve log cleaner docs
+Content-Type: text/plain; charset=utf-8
+Content-Transfer-Encoding: 7bit
+
+     [ https://issues.apache.org/jira/browse/KAFKA-15003?page=com.atlassian.jira.plugin.system.issuetabpanels:all-tabpanel ]
+
+Dan Wu updated KAFKA-15003:
+---------------------------
+    Priority: Minor  (was: Major)
+
+> Improve log cleaner docs
+> ------------------------------------------
+>
+>                 Key: KAFKA-15003
+>                 URL: https://issues.apache.org/jira/browse/KAFKA-15003
+>             Project: Kafka
+>          Issue Type: Bug
+>            Reporter: Someone
+>
+> Description of the issue.
+
+
+
+--
+This message was sent by Atlassian Jira
+(v8.20.10#820010)

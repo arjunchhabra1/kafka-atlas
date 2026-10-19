@@ -1,0 +1,73 @@
+Return-Path: 
+ <dev-return-144979-archive-asf-public=cust-asf.ponee.io@kafka.apache.org>
+X-Original-To: archive-asf-public@cust-asf.ponee.io
+Delivered-To: archive-asf-public@cust-asf.ponee.io
+Received: from mxout1-he-de.apache.org (mxout1-he-de.apache.org
+ [95.216.194.37])
+	by mx-eu-03.ponee.io (Postfix) with ESMTPS id D4ED23E835
+	for <archive-asf-public@cust-asf.ponee.io>;
+ Fri,  1 Mar 2024 11:04:02 +0000 (UTC)
+Received: from mail.apache.org (mailgw-he-de.apache.org
+ [IPv6:2a01:4f8:c2c:d4aa::1])
+	(using TLSv1.3 with cipher TLS_AES_256_GCM_SHA384 (256/256 bits)
+	 key-exchange X25519 server-signature RSA-PSS (4096 bits) server-digest
+ SHA256)
+	(No client certificate requested)
+	by mxout1-he-de.apache.org (ASF Mail Server at mxout1-he-de.apache.org) with
+ ESMTPS id 8EC5E66781
+	for <archive-asf-public@cust-asf.ponee.io>;
+ Fri,  1 Mar 2024 11:04:02 +0000 (UTC)
+Received: (qmail 3884294 invoked by uid 998); 1 Mar 2024 11:04:00 -0000
+Mailing-List: contact dev-help@kafka.apache.org; run by ezmlm
+Precedence: bulk
+List-Help: <mailto:dev-help@kafka.apache.org>
+List-Unsubscribe: <mailto:dev-unsubscribe@kafka.apache.org>
+List-Post: <mailto:dev@kafka.apache.org>
+List-Id: <dev.kafka.apache.org>
+Reply-To: dev@kafka.apache.org
+Delivered-To: mailing list dev@kafka.apache.org
+Received: (qmail 3884270 invoked by uid 116); 1 Mar 2024 11:04:00 -0000
+Received: from mailrelay1-he-de.apache.org (HELO mailrelay1-he-de.apache.org)
+ (116.203.21.61)
+ by apache.org (qpsmtpd/0.94) with ESMTP; Fri, 01 Mar 2024 11:04:00 +0000
+Authentication-Results: apache.org; auth=none
+Received: from jira2-he-de.apache.org (unknown [IPv6:2a01:4f8:242:1f49::2])
+	by mailrelay1-he-de.apache.org (ASF Mail Server at
+ mailrelay1-he-de.apache.org) with ESMTPS id 35D7341100
+	for <dev@kafka.apache.org>; Fri,  1 Mar 2024 11:04:00 +0000 (UTC)
+Received: from jira2-he-de.apache.org (localhost.localdomain [127.0.0.1])
+	by jira2-he-de.apache.org (ASF Mail Server at jira2-he-de.apache.org) with
+ ESMTP id 16359C8051D
+	for <dev@kafka.apache.org>; Fri,  1 Mar 2024 11:04:00 +0000 (UTC)
+Date: Fri, 1 Mar 2024 11:04:00 +0000 (UTC)
+From: "Mickael Maison (Jira)" <jira@apache.org>
+To: dev@kafka.apache.org
+Message-ID: <JIRA.13570461.1709291020000.30382.1709291040089@Atlassian.JIRA>
+In-Reply-To: <JIRA.13570461.1709291020000@Atlassian.JIRA>
+References: <JIRA.13570461.1709291020000@Atlassian.JIRA>
+ <JIRA.13570461.1709291020758@jira2-he-de.apache.org>
+Subject: [jira] [Created] (KAFKA-16318) Add javadoc to KafkaMetric
+MIME-Version: 1.0
+Content-Type: text/plain; charset=utf-8
+Content-Transfer-Encoding: 7bit
+X-JIRA-FingerPrint: 30527f35849b9dde25b450d4833f0394
+
+Mickael Maison created KAFKA-16318:
+--------------------------------------
+
+             Summary: Add javadoc to KafkaMetric
+                 Key: KAFKA-16318
+                 URL: https://issues.apache.org/jira/browse/KAFKA-16318
+             Project: Kafka
+          Issue Type: Bug
+          Components: docs
+            Reporter: Mickael Maison
+
+
+KafkaMetric is part of the public API but it's missing javadoc describing the class and several of its methods.
+
+
+
+--
+This message was sent by Atlassian Jira
+(v8.20.10#820010)

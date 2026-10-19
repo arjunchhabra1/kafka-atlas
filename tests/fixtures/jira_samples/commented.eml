@@ -1,0 +1,31 @@
+From: Carol Lee (Jira) <jira@apache.org>
+To: dev@kafka.apache.org
+Message-ID: <JIRA.synthetic.commented.15002@Atlassian.JIRA>
+Date: Tue, 5 Mar 2024 10:15:00 +0000 (UTC)
+Subject: [jira] [Commented] (KAFKA-15002) Flaky test in StreamsTest
+Content-Type: text/plain; charset=utf-8
+Content-Transfer-Encoding: 7bit
+
+     [ https://issues.apache.org/jira/browse/KAFKA-15002?page=com.atlassian.jira.plugin.system.issuetabpanels:all-tabpanel ]
+
+Carol Lee commented on KAFKA-15002:
+-----------------------------------
+
+I can reproduce this on trunk.
+
+> Flaky test in StreamsTest
+> ------------------------------------------
+>
+>                 Key: KAFKA-15002
+>                 URL: https://issues.apache.org/jira/browse/KAFKA-15002
+>             Project: Kafka
+>          Issue Type: Bug
+>            Reporter: Someone
+>
+> Description of the issue.
+
+
+
+--
+This message was sent by Atlassian Jira
+(v8.20.10#820010)
