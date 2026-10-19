@@ -25,6 +25,8 @@ _FIX_VERSION = re.compile(r"^[ \t]*Fix Version/s:[ \t]*(.+?)[ \t]*$", re.MULTILI
 
 _FIELD_ACTIONS = {"resolved", "closed", "reopened"}
 
+_FIX_FOR = re.compile(r"^>[ \t]+Fix For:[ \t]*(.+?)[ \t]*$", re.MULTILINE)
+
 
 class JiraEvent(BaseModel):
     ticket: str
@@ -51,6 +53,21 @@ def _field_block(body: str) -> str:
     return ""
 
 
+def _summary_fields(body: str) -> str:
+    """Header-style fields of the quoted issue summary: '>' lines up to the first bare '>' line."""
+    block = []
+    started = False
+    for line in body.splitlines():
+        if line.startswith(">"):
+            if not line.strip(">").strip() and started and any("Key:" in b for b in block):
+                break
+            started = True
+            block.append(line)
+        elif started:
+            break
+    return "\n".join(block)
+
+
 def parse_jira_notification(email: RawEmail, email_id: str) -> JiraEvent | None:
     m = _SUBJECT.match(email.subject)
     if not m:
@@ -62,7 +79,7 @@ def parse_jira_notification(email: RawEmail, email_id: str) -> JiraEvent | None:
     if action in _FIELD_ACTIONS:
         block = _field_block(email.body)
         status = _RESOLUTION.search(block)
-        fix = _FIX_VERSION.search(block)
+        fix = _FIX_VERSION.search(block) or _FIX_FOR.search(_summary_fields(email.body))
     return JiraEvent(
         ticket=m.group(2),
         action=action,

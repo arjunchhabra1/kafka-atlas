@@ -124,3 +124,16 @@ def test_render_event_optional_clauses():
     assert render_event(JiraEvent(**base, status=None, fix_version=None)) == "Alice Smith created KAFKA-1234 (T) on 2024-03-05."
     assert render_event(JiraEvent(**base, status=None, fix_version="3.7.0")) == "Alice Smith created KAFKA-1234 (T) in 3.7.0 on 2024-03-05."
     assert render_event(JiraEvent(**base, status="Fixed", fix_version=None)) == "Alice Smith created KAFKA-1234 (T) as Fixed on 2024-03-05."
+
+
+def test_fix_version_from_quoted_summary_fix_for(tmp_path):
+    ev = parse_jira_notification(load("resolved_fix_for_only", tmp_path), "e")
+    assert ev.status == "Fixed"
+    assert ev.fix_version == "2.0.2"
+
+
+def test_fix_for_in_description_text_ignored(tmp_path):
+    raw = load("resolved_fix_for_only", tmp_path)
+    body = raw.body.replace("Fix For: 2.0.2, 2.3.0, 2.1.2, 2.2.1", "Priority: Major")
+    body += "\n> Some description\n>   Fix For: 9.9.9\n"
+    assert parse_jira_notification(raw.model_copy(update={"body": body}), "e").fix_version is None
