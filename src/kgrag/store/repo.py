@@ -39,6 +39,21 @@ class Document(BaseModel):
     subject: str
 
 
+class QuestionRow(BaseModel):
+    """One row of the `questions` table."""
+
+    id: str
+    type: Literal["single_hop", "inference", "comparison", "temporal", "null"]
+    question: str
+    answer: str
+    gold_doc_ids: list[str]
+    status: Literal["draft", "kept", "edited", "dropped"]
+    split: str | None = None
+    draft_model: str | None = None
+    prompt_version: str | None = None
+    reviewed_at: datetime | None = None
+
+
 def _pack(units: list[str], sep: str, max_tokens: int) -> list[str]:
     """Greedily join units with sep while the joined text stays within max_tokens."""
     out: list[str] = []
@@ -235,3 +250,15 @@ def select_unextracted(
         params.append(limit)
     cur = conn.execute(sql, params)
     return [EmailRow(**dict(zip(EmailRow.model_fields, r, strict=True))) for r in cur.fetchall()]
+
+
+def insert_question(conn: psycopg.Connection, q: QuestionRow) -> bool:
+    """Insert a question; False when its id already exists (existing rows are never touched)."""
+    cur = conn.execute(
+        "insert into questions (id, type, question, answer, gold_doc_ids, status, split, "
+        "draft_model, prompt_version, reviewed_at) values (%(id)s, %(type)s, %(question)s, "
+        "%(answer)s, %(gold_doc_ids)s, %(status)s, %(split)s, %(draft_model)s, "
+        "%(prompt_version)s, %(reviewed_at)s) on conflict (id) do nothing",
+        q.model_dump(),
+    )
+    return cur.rowcount == 1
