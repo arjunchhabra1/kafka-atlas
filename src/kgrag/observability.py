@@ -12,13 +12,18 @@ def traced(name: str) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
     """Langfuse-trace the function when keys are set; otherwise a no-op."""
 
     def decorator(fn: Callable[..., Any]) -> Callable[..., Any]:
+        observed: Callable[..., Any] | None = None
+
         @functools.wraps(fn)
         def wrapper(*args: Any, **kwargs: Any) -> Any:
+            nonlocal observed
             if not _enabled():
                 return fn(*args, **kwargs)
-            from langfuse.decorators import observe
+            if observed is None:
+                from langfuse import observe
 
-            return observe(name=name)(fn)(*args, **kwargs)
+                observed = observe(name=name)(fn)
+            return observed(*args, **kwargs)
 
         return wrapper
 
@@ -28,6 +33,6 @@ def traced(name: str) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
 def langchain_callbacks() -> list:
     if not _enabled():
         return []
-    from langfuse.callback import CallbackHandler
+    from langfuse.langchain import CallbackHandler
 
     return [CallbackHandler()]

@@ -1,4 +1,18 @@
+import os
+
+import pytest
+
 from kgrag.config import config_hash, get_settings
+
+
+@pytest.fixture(autouse=True)
+def clean_env(monkeypatch):
+    for k in list(os.environ):
+        if k.startswith("KGRAG_"):
+            monkeypatch.delenv(k)
+    get_settings.cache_clear()
+    yield
+    get_settings.cache_clear()
 
 
 def test_settings_load_defaults():

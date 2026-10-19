@@ -11,7 +11,8 @@ dependencies = [
   "neo4j>=5.20",
   "tiktoken>=0.7",
   "typer>=0.12",
-  "langfuse>=2.40,<3",
+  "langfuse>=3,<4",
+  "langchain>=0.3",
 ]
 
 [dependency-groups]
