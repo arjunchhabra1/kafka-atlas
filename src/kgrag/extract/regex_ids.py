@@ -18,8 +18,8 @@ class IdMention(BaseModel):
     span: tuple[int, int]
 
 
-_KIP = re.compile(r"\bKIP(?:-| )?(\d+)\b", re.IGNORECASE)
-_TICKET = re.compile(r"\bKAFKA-(\d+)\b", re.IGNORECASE)
+_KIP = re.compile(r"\bKIP(?:-| )?(\d{1,7})\b", re.IGNORECASE)
+_TICKET = re.compile(r"\bKAFKA-(\d{1,7})\b(?!\.\d)", re.IGNORECASE)
 
 # Single-digit major; not part of a longer dotted/digit run on either side.
 _RELEASE = re.compile(r"(?<![\d.])(?<!\d\.)\b[0-9]\.[0-9]{1,2}(\.[0-9]{1,2})?(?!\d|\.\d)\b")
@@ -41,7 +41,7 @@ KAFKA_RELEASE_LINES = frozenset(
 # 3.4.x, Scala 2.x, ...). A version preceded by one of these (within 2 words) is not a Release.
 THIRD_PARTY_NAMES = frozenset(
     "zookeeper zk scala java jdk jre jvm gradle maven jackson netty jetty log4j log4j2 slf4j "
-    "rocksdb junit mockito plugin python go node docker ubuntu debian centos spring guava "
+    "rocksdb junit mockito plugin python docker ubuntu debian centos spring guava "
     "protobuf grpc zstd lz4 snappy".split()
 )
 

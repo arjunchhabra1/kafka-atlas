@@ -134,3 +134,20 @@ def test_kafka_versions_still_match_near_other_words():
     assert ids("Kafka 3.7.0", "Release") == ["3.7.0"]
     assert ids("Kafka version 3.7.0", "Release") == ["3.7.0"]
     assert ids("upgrade to 3.7.0", "Release") == ["3.7.0"]
+
+
+@pytest.mark.parametrize(
+    "text,release",
+    [("kafka-3.4.0-rc0/javadoc", "3.4.0"), ("kafka-2.8.0.tgz", "2.8.0")],
+)
+def test_artifact_names_are_not_tickets(text, release):
+    assert ids(text, "JiraTicket") == []
+    assert ids(text, "Release") == [release]
+
+
+def test_go_with_version_matches():
+    assert ids("let's go with 3.7.0", "Release") == ["3.7.0"]
+
+
+def test_absurdly_long_digit_runs_do_not_raise():
+    assert extract_ids("KIP" + "9" * 5000 + " KAFKA-" + "9" * 5000) == []
