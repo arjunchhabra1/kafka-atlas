@@ -27,6 +27,16 @@ _RELEASE = re.compile(r"(?<![\d.])(?<!\d\.)\b[0-9]\.[0-9]{1,2}(\.[0-9]{1,2})?(?!
 _SUFFIX = re.compile(r"-(?:rc\d*|snapshot)\b", re.IGNORECASE)
 _KEYWORD = re.compile(r"(?:releases?|versions?|branch|rc\d*)", re.IGNORECASE)
 
+# Real Kafka release lines (major, minor). A bare x.y.z with no keyword context only counts
+# as a Release when its (major, minor) is listed here; this rejects outline numbering like
+# "4.6.4". MUST be extended when a new release line ships.
+KAFKA_RELEASE_LINES = frozenset(
+    {(0, 8), (0, 9), (0, 10), (0, 11), (1, 0), (1, 1)}
+    | {(2, n) for n in range(0, 9)}
+    | {(3, n) for n in range(0, 10)}
+    | {(4, 0), (4, 1), (4, 2)}
+)
+
 _MAX_WORDS_BETWEEN = 3
 _WINDOW = _MAX_WORDS_BETWEEN + 1  # keyword may be this many tokens away (3 between)
 
@@ -53,6 +63,8 @@ def extract_ids(text: str) -> list[IdMention]:
     for m in _TICKET.finditer(text):
         found.add((m.start(), m.end(), "JiraTicket", f"KAFKA-{int(m.group(1))}"))
     for m in _RELEASE.finditer(text):
-        if m.group(1) or _has_release_context(text, m.start(), m.end()):
+        major, minor = m.group(0).split(".")[:2]
+        known_line = bool(m.group(1)) and (int(major), int(minor)) in KAFKA_RELEASE_LINES
+        if known_line or _has_release_context(text, m.start(), m.end()):
             found.add((m.start(), m.end(), "Release", m.group(0)))
     return [IdMention(kind=k, id=i, span=(s, e)) for s, e, k, i in sorted(found)]

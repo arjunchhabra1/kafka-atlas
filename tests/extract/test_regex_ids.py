@@ -98,3 +98,19 @@ def test_ordering_spans_and_repeats():
     assert all(isinstance(m, IdMention) for m in got)
     for m in got:
         assert m.span[0] < m.span[1]
+
+
+def test_bare_xyz_outline_numbering_rejected():
+    text = "4.6.3 ControllerBrokerRequestBatch 4.6.4 PartitionStateMachine"
+    assert ids(text, "Release") == []
+
+
+def test_bare_xyz_needs_known_release_line():
+    assert ids("bump to 3.7.0", "Release") == ["3.7.0"]
+    assert ids("fixed 3.9.1", "Release") == ["3.9.1"]
+    assert ids("section 5.1.2", "Release") == []
+
+
+def test_keyword_context_bypasses_release_line_whitelist():
+    assert ids("the 5.1 release", "Release") == ["5.1"]
+    assert ids("version 5.1.2", "Release") == ["5.1.2"]
