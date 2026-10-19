@@ -32,6 +32,7 @@ NULL_ANSWER = "The mailing list does not contain this information."
 MAX_CONSECUTIVE_FAILURES = 5  # a systemic error (bad key, outage) must not burn the whole corpus
 MAX_KEY_TERMS = 4
 MIN_KEY_TERMS = 2
+ATTEMPT_CAP_FACTOR = 3  # per type, at most this many drafting attempts per kept-draft target
 AVG_GOLD_DOCS = {"single_hop": 1, "inference": 2.5, "comparison": 2, "temporal": 2.5, "null": 0}
 # Leave-one-out calls: only 3-doc sets (about half of inference/temporal) get one call per doc.
 AVG_LOO_CALLS = {"inference": 1.5, "temporal": 1.5}
@@ -214,18 +215,30 @@ def _question_id(d: DraftQuestion) -> str:
     return hashlib.sha256(raw.encode()).hexdigest()[:12]
 
 
-def _already_drafted(conn: psycopg.Connection, es: EvidenceSet) -> bool:
-    """True if questions already hold this evidence (null: same thread link)."""
-    if es.type == "null":
-        row = conn.execute(
-            "select 1 from questions where type = 'null' and link = %s limit 1", (es.link,)
-        ).fetchone()
-    else:
-        row = conn.execute(
-            "select 1 from questions where type = %s and gold_doc_ids @> %s and "
-            "gold_doc_ids <@ %s limit 1", (es.type, es.doc_ids, es.doc_ids),
-        ).fetchone()
+def attempt_cap(target: int) -> int:
+    return ATTEMPT_CAP_FACTOR * target
+
+
+def _already_attempted(conn: psycopg.Connection, es: EvidenceSet) -> bool:
+    """True if this exact set was drafted before; failed attempts are retried."""
+    row = conn.execute(
+        "select 1 from evidence_attempts where type = %s and evidence_doc_ids = %s "
+        "and link = %s and outcome <> 'failed' limit 1",
+        (es.type, sorted(es.doc_ids), es.link),
+    ).fetchone()
     return row is not None
+
+
+def _record_attempt(
+    conn: psycopg.Connection, es: EvidenceSet, outcome: str, question_id: str | None
+) -> None:
+    conn.execute(
+        "insert into evidence_attempts (type, link, evidence_doc_ids, outcome, question_id) "
+        "values (%s, %s, %s, %s, %s) on conflict (type, evidence_doc_ids, link) do update "
+        "set outcome = excluded.outcome, question_id = excluded.question_id, "
+        "attempted_at = now()",
+        (es.type, es.link, sorted(es.doc_ids), outcome, question_id),
+    )
 
 
 def draft_questions(
@@ -252,7 +265,7 @@ def draft_questions(
     single_target = targets.get("single_hop", 0)
     single_kept = 0
 
-    def store(d: DraftQuestion, es: EvidenceSet, origin: str) -> None:
+    def store(d: DraftQuestion, es: EvidenceSet, origin: str) -> str:
         row = QuestionRow(
             id=_question_id(d), type=d.type, question=d.question, answer=d.answer,
             gold_doc_ids=d.gold_doc_ids, status="draft", draft_model=model,
@@ -263,10 +276,10 @@ def draft_questions(
             stats.kept += 1
             stats.kept_by_type[d.type] = stats.kept_by_type.get(d.type, 0) + 1
             stats.kept_by_origin[origin] = stats.kept_by_origin.get(origin, 0) + 1
-        conn.commit()
+        return row.id
 
-    def process(es: EvidenceSet) -> bool:
-        """Draft and filter one set; True when it counts toward its own type's target."""
+    def process(es: EvidenceSet) -> tuple[bool, str, str | None]:
+        """Draft and filter one set: (counts toward its type's target, outcome, question id)."""
         nonlocal single_kept
         docs = get_documents(conn, es.doc_ids)
         if len(docs) != len(es.doc_ids):
@@ -277,52 +290,56 @@ def draft_questions(
         d = draft_question(es, docs, llm, topic=topic)
         stats.drafted += 1
         if es.type == "single_hop":
-            store(d, es, "sampled")
             single_kept += 1
-            return True
+            return True, "kept", store(d, es, "sampled")
         if es.type == "null":
             if not null_question_absent(d, conn):
                 stats.dropped_null_present += 1
-                return False
-            store(d, es, "sampled")
-            return True
+                return False, "dropped_null_present", None
+            return True, "kept", store(d, es, "sampled")
         alone = single_source_doc(d, docs, llm)
         if alone is not None:
             if single_kept >= single_target:
                 stats.dropped_single_source += 1
-                return False
+                return False, "dropped_single_source", None
             stats.relabeled += 1
             single_kept += 1
-            store(d.model_copy(update={"type": "single_hop", "gold_doc_ids": [alone]}),
-                  es, "relabeled")
-            return False
+            qid = store(d.model_copy(update={"type": "single_hop", "gold_doc_ids": [alone]}),
+                        es, "relabeled")
+            return False, "relabeled", qid
         kept_docs = leave_one_out(d, docs, llm)
+        outcome = "kept"
         if len(kept_docs) < len(docs):
             dates = [x.date for x in kept_docs]
             if es.type == "temporal" and max(dates) - min(dates) < MIN_TEMPORAL_GAP:
                 stats.dropped_shrunk += 1
-                return False
+                return False, "dropped_shrunk", None
             d = d.model_copy(update={"gold_doc_ids": [x.doc_id for x in kept_docs]})
-        store(d, es, "sampled")
-        return True
+            outcome = "shrunk"
+        return True, outcome, store(d, es, "sampled")
 
     for qtype in DRAFT_ORDER:
         target = targets.get(qtype)
         if target is None:
             continue
-        kept = failures = 0
+        kept = failures = attempts = 0
+        cap = attempt_cap(target)
         for es in iter_evidence_sets(conn, qtype, seed):
-            if kept >= target or failures >= MAX_CONSECUTIVE_FAILURES:
+            if kept >= target or failures >= MAX_CONSECUTIVE_FAILURES or attempts >= cap:
                 break
-            if _already_drafted(conn, es):
+            if _already_attempted(conn, es):
                 stats.skipped_existing += 1
                 continue
+            attempts += 1
             try:
-                counted = process(es)
+                counted, outcome, qid = process(es)
+                _record_attempt(conn, es, outcome, qid)
+                conn.commit()
                 failures = 0
             except Exception as exc:  # noqa: BLE001 - one bad draft must not lose the others
                 conn.rollback()
                 log_failure(conn, "draft", es.link, f"{type(exc).__name__}: {exc}")
+                _record_attempt(conn, es, "failed", None)
                 conn.commit()
                 stats.failed += 1
                 failures += 1
@@ -330,8 +347,8 @@ def draft_questions(
             kept += counted
         if kept < target:
             stats.shortfall[qtype] = target - kept
-            log.warning("%s: kept %d of %d drafts (ran out of evidence or failing)",
-                        qtype, kept, target)
+            log.warning("%s: kept %d of %d drafts after %d attempts (cap %d)",
+                        qtype, kept, target, attempts, cap)
     return stats
 
 
@@ -341,9 +358,13 @@ def avg_doc_tokens(conn: psycopg.Connection) -> int:
 
 
 def estimate_draft_cost_usd(
-    counts: dict[QuestionType, int], avg_tokens: int, model: str, *, oversample: float = 1.3
+    counts: dict[QuestionType, int], avg_tokens: int, model: str, *, oversample: float = 1.3,
+    worst_case: bool = False,
 ) -> float:
-    """Draft call per set plus one filter call per gold doc of each multi-hop set."""
+    """Draft call per set plus filter calls per multi-hop set.
+
+    Expected = one attempt per target draft; worst case = every type uses its full attempt cap.
+    """
     price = get_settings().pricing[model]
     draft_overhead = count_tokens(SYSTEM_PROMPT + json.dumps(DraftSchema.model_json_schema()))
     filter_overhead = count_tokens(
@@ -352,6 +373,8 @@ def estimate_draft_cost_usd(
     in_tok = out_tok = 0.0
     for qtype, count in counts.items():
         n = math.ceil(count * oversample)
+        if worst_case:
+            n = attempt_cap(n)
         docs = AVG_GOLD_DOCS[qtype]
         in_tok += n * (draft_overhead + max(docs, 1) * avg_tokens)
         out_tok += n * EST_DRAFT_OUTPUT_TOKENS

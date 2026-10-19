@@ -167,10 +167,12 @@ def questions_draft(
         apply_migrations(conn)
         model = settings.models.draft
         avg = avg_doc_tokens(conn)
-        cost = estimate_draft_cost_usd(wanted, avg, model, oversample=oversample)
+        expected = estimate_draft_cost_usd(wanted, avg, model, oversample=oversample)
+        cost = estimate_draft_cost_usd(wanted, avg, model, oversample=oversample, worst_case=True)
         typer.echo(
             f"{sum(wanted.values())} questions (x{oversample} oversample), avg doc {avg} tokens; "
-            f"estimated cost ${cost:.2f} (guard ${settings.cost_guard_usd:.2f})"
+            f"expected estimated cost ${expected:.2f}, worst-case ${cost:.2f} "
+            f"(guard ${settings.cost_guard_usd:.2f} applies to the worst case)"
         )
         if cost > settings.cost_guard_usd and not yes:
             if not sys.stdin.isatty():

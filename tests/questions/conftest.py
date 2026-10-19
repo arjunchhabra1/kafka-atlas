@@ -8,7 +8,7 @@ from kgrag.store.repo import EmailRow
 from kgrag.tokens import count_tokens
 
 TABLES = (
-    "questions", "relations", "mentions", "llm_cache", "documents", "jira_events", "emails",
+    "evidence_attempts", "questions", "relations", "mentions", "llm_cache", "documents", "jira_events", "emails",
     "threads",
 )
 FILLER = (

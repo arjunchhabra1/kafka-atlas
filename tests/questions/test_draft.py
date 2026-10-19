@@ -16,8 +16,10 @@ from kgrag.questions.draft import (
     SingleSourceSchema,
     TYPE_INSTRUCTIONS,
     answerable_from_single_source,
+    avg_doc_tokens,
     draft_question,
     draft_questions,
+    estimate_draft_cost_usd,
     leave_one_out,
     null_question_absent,
 )
@@ -200,7 +202,7 @@ def test_null_keyword_check(corpus):
 def test_null_drafts_filtered_by_keyword_check(corpus):
     present = FakeLLM(key_terms=["broker", "protocol"])
     stats = draft_questions(corpus, {"null": 2}, seed=1, llm=present, oversample=1.0)
-    assert stats.dropped_null_present == 9 and _rows(corpus) == []  # tops up through all 9 threads
+    assert stats.dropped_null_present == 6 and _rows(corpus) == []  # tops up to the cap (6)
     assert stats.shortfall == {"null": 2}
 
     absent = FakeLLM(key_terms=["zebra", "unicorn"])
@@ -270,6 +272,89 @@ def test_key_terms_truncated_to_four(corpus):
     llm = FakeLLM(key_terms=list("abcdef"))
     draft_questions(corpus, {"single_hop": 1}, seed=1, llm=llm, oversample=1.0)
     assert corpus.execute("select key_terms from questions").fetchone()[0] == list("abcd")
+
+
+def _drafted_sets(llm, marker):
+    """Doc-id tuples of every draft call whose prompt contains marker."""
+    return [
+        tuple(sorted(re.findall(r"^\[([^\]]+)\]", text, re.M)))
+        for name, text in llm.calls if name == "DraftSchema" and marker in text
+    ]
+
+
+def _every_doc(conn):
+    return {r[0] for r in conn.execute("select doc_id from documents")}
+
+
+def test_rerun_after_relabel_does_not_redraft(corpus):
+    llm = FakeLLM(answers_alone=_every_doc(corpus))
+    counts = {"inference": 1, "single_hop": 13}  # headroom of 1 -> one relabel
+    first = draft_questions(corpus, counts, seed=3, llm=llm, oversample=1.0)
+    assert first.relabeled == 1
+    draft_questions(corpus, counts, seed=3, llm=llm, oversample=1.0)
+    sets = _drafted_sets(llm, "combining facts")
+    assert sets and len(sets) == len(set(sets))
+    outcomes = {r[0] for r in corpus.execute("select outcome from evidence_attempts")}
+    assert {"relabeled", "dropped_single_source", "kept"} <= outcomes
+
+
+def test_rerun_after_leave_one_out_shrink_does_not_redraft(corpus):
+    llm = FakeLLM(others_answerable=lambda ids: len(ids) == 2)
+    draft_questions(corpus, {"inference": 4}, seed=3, llm=llm, oversample=1.0)
+    assert corpus.execute(
+        "select count(*) from evidence_attempts where outcome = 'shrunk'"
+    ).fetchone()[0] >= 1
+    draft_questions(corpus, {"inference": 4}, seed=3, llm=llm, oversample=1.0)
+    sets = _drafted_sets(llm, "combining facts")
+    assert len(sets) == len(set(sets))
+
+
+def test_rerun_after_drop_does_not_redraft(corpus):
+    llm = FakeLLM(answers_alone=_every_doc(corpus))
+    draft_questions(corpus, {"inference": 2}, seed=3, llm=llm, oversample=1.0)
+    n_first = len(_drafted_sets(llm, "combining facts"))
+    assert n_first >= 1
+    draft_questions(corpus, {"inference": 2}, seed=3, llm=llm, oversample=1.0)
+    sets = _drafted_sets(llm, "combining facts")
+    assert len(sets) == len(set(sets))
+
+
+def test_failed_attempts_are_retried(corpus):
+    draft_questions(corpus, {"single_hop": 1}, seed=1, llm=FakeLLM(fail=True), oversample=1.0)
+    failed = corpus.execute(
+        "select evidence_doc_ids from evidence_attempts where outcome = 'failed'"
+    ).fetchall()
+    assert len(failed) == 3  # attempt cap for a target of 1
+    llm = FakeLLM()
+    stats = draft_questions(corpus, {"single_hop": 1}, seed=1, llm=llm, oversample=1.0)
+    assert stats.skipped_existing == 0 and stats.kept == 1
+    assert _drafted_sets(llm, "single document")[0] == tuple(failed[0][0])
+    assert corpus.execute(
+        "select count(*) from evidence_attempts where outcome = 'failed'"
+    ).fetchone()[0] == 2
+
+
+def test_attempt_cap_enforced(corpus, caplog):
+    llm = FakeLLM(key_terms=["broker", "protocol"])  # every null draft is rejected
+    stats = draft_questions(corpus, {"null": 2}, seed=2, llm=llm, oversample=1.0)
+    assert stats.drafted == 6 == llm.count("DraftSchema")  # ceil(3 x target)
+    assert stats.kept == 0 and stats.shortfall == {"null": 2}
+    assert "cap 6" in caplog.text
+
+
+def test_guard_compares_worst_case(corpus, cli_env, monkeypatch):
+    counts = {"inference": 5, "null": 5}
+    avg = avg_doc_tokens(corpus)
+    model = get_settings().models.draft
+    expected = estimate_draft_cost_usd(counts, avg, model, oversample=1.3)
+    worst = estimate_draft_cost_usd(counts, avg, model, oversample=1.3, worst_case=True)
+    assert expected < worst
+    monkeypatch.setattr(draft_mod, "_default_llm", _boom)
+    monkeypatch.setenv("KGRAG_COST_GUARD_USD", str((expected + worst) / 2))
+    get_settings.cache_clear()
+    res = CliRunner().invoke(cli.app, ["questions", "draft", "--counts", "inference=5,null=5"])
+    assert res.exit_code == 2, res.output
+    assert "worst-case" in res.output and "expected" in res.output
 
 
 # --- CLI -------------------------------------------------------------------------------
