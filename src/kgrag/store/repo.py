@@ -7,6 +7,7 @@ from typing import Literal
 import psycopg
 from pydantic import BaseModel
 
+from kgrag.extract.schema import AnchorHints, Mention
 from kgrag.ingest.jira import JiraEvent, render_event
 from kgrag.tokens import count_tokens, split_tokens
 
@@ -192,3 +193,45 @@ def log_failure(conn: psycopg.Connection, stage: str, item_id: str, error: str) 
         "insert into failures (stage, item_id, error) values (%s, %s, %s)",
         (stage, item_id, error),
     )
+
+
+def load_mentions(conn: psycopg.Connection) -> list[Mention]:
+    """All persisted mentions (every source), ordered by mention_id."""
+    cur = conn.execute(
+        "select mention_id, surface, type, email_id, context from mentions order by mention_id"
+    )
+    return [
+        Mention(mention_id=r[0], surface=r[1], type=r[2], email_id=r[3], context=r[4])
+        for r in cur.fetchall()
+    ]
+
+
+def load_anchor_hints(conn: psycopg.Connection) -> AnchorHints:
+    pairs = conn.execute(
+        "select distinct sender_name, sender_address from emails where kind = 'human' "
+        "order by sender_name, sender_address"
+    ).fetchall()
+    actors = conn.execute(
+        "select distinct actor from jira_events where actor is not null order by actor"
+    ).fetchall()
+    return AnchorHints(
+        sender_pairs=[(n, a) for n, a in pairs], jira_actors=[r[0] for r in actors]
+    )
+
+
+def select_unextracted(
+    conn: psycopg.Connection, prompt_version: str, model: str, limit: int | None = None
+) -> list[EmailRow]:
+    """Human emails with no llm_cache row for (prompt_version, model), by date then id."""
+    sql = (
+        "select id, message_id, thread_id, date, sender_name, sender_address, subject, "
+        "body_clean, kind from emails e where kind = 'human' and not exists ("
+        "select 1 from llm_cache c where c.email_id = e.id and c.prompt_version = %s "
+        "and c.model = %s) order by date, id"
+    )
+    params: list = [prompt_version, model]
+    if limit is not None:
+        sql += " limit %s"
+        params.append(limit)
+    cur = conn.execute(sql, params)
+    return [EmailRow(**dict(zip(EmailRow.model_fields, r, strict=True))) for r in cur.fetchall()]

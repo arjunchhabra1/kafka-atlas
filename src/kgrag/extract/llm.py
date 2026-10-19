@@ -41,6 +41,7 @@ __all__ = [
     "PROMPT_VERSION",
     "ExtractionError",
     "ExtractionStats",
+    "batch_email_ids",
     "build_request",
     "estimate_cost_usd",
     "parse_response",
@@ -166,6 +167,14 @@ def _batch_dir() -> Path:
 
 def _batch_path(batch_id: str) -> Path:
     return _batch_dir() / f"{batch_id}.json"
+
+
+def batch_email_ids(batch_id: str) -> set[str]:
+    """Email ids submitted in a stored batch (for reporting emails a resume would skip)."""
+    path = _batch_path(batch_id)
+    if not path.exists():
+        raise FileNotFoundError(f"no custom_id mapping for batch {batch_id}: {path}")
+    return set(json.loads(path.read_text()).values())
 
 
 def _error_type(result: Any) -> str | None:

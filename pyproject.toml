@@ -37,7 +37,7 @@ packages = ["src/kgrag"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-addopts = "-m 'not live'"
+addopts = "-m 'not live' --import-mode=importlib"
 markers = [
   "integration: needs Docker (testcontainers)",
   "quality: quality/eval tests, non-blocking",

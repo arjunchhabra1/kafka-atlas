@@ -29,6 +29,13 @@ class Relation(BaseModel):
     confidence: float
 
 
+class AnchorHints(BaseModel):
+    """Identity evidence for entity resolution: header name/address pairs and Jira display names."""
+
+    sender_pairs: list[tuple[str, str]]  # distinct (sender_name, sender_address), sorted
+    jira_actors: list[str]  # distinct Jira display names, sorted
+
+
 class ExtractionResult(BaseModel):
     email_id: str
     mentions: list[Mention]
