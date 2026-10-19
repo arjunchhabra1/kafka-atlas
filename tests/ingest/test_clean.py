@@ -58,3 +58,10 @@ def test_short_log_run_kept():
 
 def test_blank_lines_collapsed_and_trailing_stripped():
     assert clean_body("a\n\n\n\n\nb   \n\n") == "a\n\nb"
+
+
+def test_patch_with_blank_context_lines_and_multiple_hunks():
+    diff = ["diff --git a/x b/x", "--- a/x", "+++ b/x", "@@ -1,3 +1,3 @@", " a", "", "-b", "+c",
+            "@@ -9,2 +9,2 @@", "", "-d", "+e"]
+    out = clean_body("Look:\n" + "\n".join(diff) + "\nThanks")
+    assert out == "Look:\n[patch: 12 lines]\nThanks"

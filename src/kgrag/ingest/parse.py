@@ -111,7 +111,9 @@ def parse_mbox(
     """
     path = Path(path)
     mbx = mailbox.mbox(
-        str(path), factory=lambda f: email.message_from_binary_file(f, policy=policy.default)
+        str(path),
+        factory=lambda f: email.message_from_binary_file(f, policy=policy.default),
+        create=False,
     )
     try:
         for index, msg in enumerate(mbx):
@@ -191,10 +193,12 @@ def assign_threads(emails: list[RawEmail]) -> dict[str, str]:
                 break
     threads = {}
     for mid in known:
-        seen = {mid}
+        path = [mid]
         cur = mid
-        while cur in parent and parent[cur] not in seen:
+        while cur in parent and parent[cur] not in path:
             cur = parent[cur]
-            seen.add(cur)
+            path.append(cur)
+        if cur in parent:  # parent[cur] is on the path: a reply cycle
+            cur = min(path[path.index(parent[cur]) :])
         threads[mid] = cur
     return threads

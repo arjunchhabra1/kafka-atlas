@@ -62,8 +62,20 @@ def _diff_end(lines: list[str], i: int) -> int | None:
         start.startswith("--- a/") and i + 1 < len(lines) and lines[i + 1].startswith("+++ b/")
     ):
         j = i + 1
-        while j < len(lines) and lines[j] and _DIFF_LINE.match(lines[j]):
-            j += 1
+        while j < len(lines):
+            if lines[j] and _DIFF_LINE.match(lines[j]):
+                j += 1
+                continue
+            if not lines[j].strip():
+                # mail clients strip empty context lines: a blank belongs to the
+                # diff when the next non-blank line is a diff line
+                k = j
+                while k < len(lines) and not lines[k].strip():
+                    k += 1
+                if k < len(lines) and _DIFF_LINE.match(lines[k]):
+                    j = k
+                    continue
+            break
         return j
     return None
 

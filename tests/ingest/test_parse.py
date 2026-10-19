@@ -3,6 +3,8 @@ from datetime import UTC, datetime
 from email.message import EmailMessage
 from pathlib import Path
 
+import pytest
+
 from kgrag.ingest.parse import (
     RawEmail,
     assign_threads,
@@ -94,7 +96,7 @@ def test_naive_date_assumed_utc_and_subject_decoded(tmp_path):
     p = _write(tmp_path / "m.mbox", [_msg(date="Tue, 05 Mar 2024 10:00:00 -0000",
                                           subject="=?utf-8?q?caf=C3=A9?=   topic")])
     [e] = list(parse_mbox(p))
-    assert e.date.tzinfo is not None
+    assert e.date == datetime(2024, 3, 5, 10, tzinfo=UTC)
     assert e.subject == "café topic"
 
 
@@ -123,4 +125,11 @@ def test_assign_threads():
 
 def test_assign_threads_cycle_terminates():
     t = assign_threads([_raw("a", irt="b"), _raw("b", irt="a")])
-    assert set(t) == {"a", "b"}
+    assert t == {"a": "a", "b": "a"}
+
+
+def test_parse_missing_path_raises_and_creates_nothing(tmp_path):
+    missing = tmp_path / "nope.mbox"
+    with pytest.raises(mailbox.NoSuchMailboxError):
+        list(parse_mbox(missing))
+    assert not missing.exists()
