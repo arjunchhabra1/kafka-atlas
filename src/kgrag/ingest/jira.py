@@ -23,6 +23,9 @@ _RESOLUTION = re.compile(r"^[ \t]*Resolution:[ \t]*(.+?)[ \t]*$", re.MULTILINE)
 _FIX_VERSION = re.compile(r"^[ \t]*Fix Version/s:[ \t]*(.+?)[ \t]*$", re.MULTILINE)
 
 
+_FIELD_ACTIONS = {"resolved", "closed", "reopened"}
+
+
 class JiraEvent(BaseModel):
     ticket: str
     action: Action
@@ -34,14 +37,18 @@ class JiraEvent(BaseModel):
     title: str
 
 
-def _header_block(body: str) -> str:
-    """Lines before the quoted issue summary (first line starting with '>')."""
-    lines = []
-    for line in body.splitlines():
-        if line.startswith(">"):
-            break
-        lines.append(line)
-    return "\n".join(lines)
+def _field_block(body: str) -> str:
+    """Jira's field lines: those under the first '-----' underline, up to the next blank line."""
+    lines = body.splitlines()
+    for i, line in enumerate(lines):
+        if re.fullmatch(r"-{5,}\s*", line):
+            block = []
+            for nxt in lines[i + 1 :]:
+                if not nxt.strip():
+                    break
+                block.append(nxt)
+            return "\n".join(block)
+    return ""
 
 
 def parse_jira_notification(email: RawEmail, email_id: str) -> JiraEvent | None:
@@ -51,9 +58,11 @@ def parse_jira_notification(email: RawEmail, email_id: str) -> JiraEvent | None:
     action = _ACTIONS.get(m.group(1).strip().lower())
     if action is None:
         return None
-    head = _header_block(email.body)
-    status = _RESOLUTION.search(head)
-    fix = _FIX_VERSION.search(head)
+    status = fix = None
+    if action in _FIELD_ACTIONS:
+        block = _field_block(email.body)
+        status = _RESOLUTION.search(block)
+        fix = _FIX_VERSION.search(block)
     return JiraEvent(
         ticket=m.group(2),
         action=action,

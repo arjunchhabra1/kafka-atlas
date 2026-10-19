@@ -22,7 +22,7 @@ CASES = [
     ("created", "KAFKA-16318", "created", "Mickael Maison"),
     ("resolved", "KAFKA-8090", "resolved", "Manikumar"),
     ("resolved_no_fix_version", "KAFKA-16071", "resolved", "Luke Chen"),
-    ("reopened", "KAFKA-4600", "reopened", None),
+    ("reopened", "KAFKA-4600", "reopened", "Braedon Vickers"),
     ("assigned", "KAFKA-15001", "assigned", "Bob Jones"),
     ("commented", "KAFKA-15002", "commented", "Carol Lee"),
     ("updated", "KAFKA-15003", "updated", "Dan Wu"),
@@ -37,7 +37,7 @@ def test_parse_sample(name, ticket, action, actor, tmp_path):
     assert ev is not None
     assert ev.ticket == ticket
     assert ev.action == action
-    assert ev.actor == (actor or raw.sender_name.removesuffix(" (Jira)").removesuffix(" (JIRA)"))
+    assert ev.actor == actor
     assert "(Jira)" not in ev.actor and "(JIRA)" not in ev.actor
     assert ev.source_email_id == "email-1"
     assert ev.date == raw.date
@@ -74,6 +74,22 @@ def test_first_fix_version_taken(tmp_path):
     raw = load("resolved", tmp_path)
     raw = raw.model_copy(update={"body": raw.body.replace("Fix Version/s: 2.3.0", "Fix Version/s: 2.3.0, 2.2.1")})
     assert parse_jira_notification(raw, "e").fix_version == "2.3.0"
+
+
+def test_created_description_fields_ignored(tmp_path):
+    raw = load("created", tmp_path)
+    body = raw.body.replace("KafkaMetric is part", "Resolution: Fixed\nFix Version/s: 9.9.9\nKafkaMetric is part")
+    assert body != raw.body
+    ev = parse_jira_notification(raw.model_copy(update={"body": body}), "e")
+    assert ev.status is None and ev.fix_version is None
+
+
+def test_comment_text_fields_ignored(tmp_path):
+    raw = load("resolved", tmp_path)
+    body = raw.body.replace("Issue resolved by pull request", "Fix Version/s: 9.9.9\nResolution: Duplicate\n\nIssue resolved by pull request")
+    assert body != raw.body
+    ev = parse_jira_notification(raw.model_copy(update={"body": body}), "e")
+    assert ev.status == "Fixed" and ev.fix_version == "2.3.0"
 
 
 def test_unknown_subject_returns_none(tmp_path):
