@@ -1,0 +1,15 @@
+pg_dsn: postgresql://kgrag:kgrag@localhost:5432/kgrag
+neo4j_uri: bolt://localhost:7687
+neo4j_user: neo4j
+neo4j_password: devpassword
+models:
+  extract: claude-sonnet-5-5
+  draft: claude-sonnet-5-5
+  answer: claude-sonnet-5-5
+  judge: claude-opus-5-5
+  embed: voyage-TBD-in-task-13  # placeholder; pinned in Task 13
+budget_tokens: 4000
+chunk_tokens: 500
+cost_guard_usd: 5.00
+prompt_versions: {}
+data_dir: data

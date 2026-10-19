@@ -1,0 +1,27 @@
+from kgrag.config import config_hash, get_settings
+
+
+def test_settings_load_defaults():
+    s = get_settings()
+    assert s.budget_tokens == 4000
+    assert s.chunk_tokens == 500
+    assert s.models.judge == "claude-opus-5-5"
+
+
+def test_config_hash_stable():
+    s = get_settings()
+    h = config_hash(s)
+    assert len(h) == 12
+    assert config_hash(s) == h
+    changed = s.model_copy(update={"budget_tokens": 1234})
+    assert config_hash(changed) != h
+
+
+def test_env_overrides_yaml(monkeypatch):
+    from kgrag.config import Settings
+
+    monkeypatch.setenv("KGRAG_BUDGET_TOKENS", "999")
+    monkeypatch.setenv("KGRAG_MODELS__JUDGE", "other-judge")
+    s = Settings()
+    assert s.budget_tokens == 999
+    assert s.models.judge == "other-judge"
