@@ -17,6 +17,7 @@ dependencies = [
   "tenacity>=9.2.1",
   "anthropic>=1.15.0",
   "langchain-anthropic>=1.7.6",
+  "rich>=15.0.0",
 ]
 
 [dependency-groups]

@@ -17,6 +17,8 @@ from kgrag.extract.pipeline import persist_extractions
 from kgrag.ingest.fetch import fetch_month, month_range
 from kgrag.ingest.pipeline import ingest as run_ingest
 from kgrag.questions.draft import avg_doc_tokens, draft_questions, estimate_draft_cost_usd
+from kgrag.questions.review import review_session
+from kgrag.questions.split import AlreadySplitError, persist_splits
 from kgrag.store.db import apply_migrations, connect
 from kgrag.store.repo import select_unextracted
 from kgrag.tokens import count_tokens
@@ -185,5 +187,42 @@ def questions_draft(
         if stats.failed and not stats.drafted:
             typer.echo("Every draft attempt failed; see the failures table.", err=True)
             raise typer.Exit(1)
+    finally:
+        conn.close()
+
+
+@questions_app.command("review")
+def questions_review(
+    qtype: str | None = typer.Option(None, "--type", help="Only review this question type."),
+) -> None:
+    """Review drafts one at a time: keep, edit, drop or skip. Every decision is saved at once."""
+    if qtype is not None and qtype not in QUESTION_TYPES:
+        raise typer.BadParameter(f"unknown question type: {qtype}")
+    conn = connect()
+    try:
+        apply_migrations(conn)
+        review_session(conn, qtype=qtype)
+    finally:
+        conn.close()
+
+
+@questions_app.command("split")
+def questions_split(
+    force: bool = typer.Option(False, "--force", help="Reassign even if splits already exist."),
+) -> None:
+    """Assign kept/edited questions to dev (20%) and test (80%), stratified by type."""
+    conn = connect()
+    try:
+        apply_migrations(conn)
+        try:
+            counts = persist_splits(conn, force=force)
+        except AlreadySplitError:
+            typer.echo("Kept questions already have a split; pass --force to reassign.", err=True)
+            raise typer.Exit(1) from None
+        for qtype, c in counts.items():
+            typer.echo(f"{qtype}: dev {c['dev']}, test {c['test']}")
+        remaining = conn.execute("select count(*) from questions where status = 'draft'").fetchone()[0]
+        if remaining:
+            typer.echo(f"warning: {remaining} draft(s) not yet reviewed were ignored", err=True)
     finally:
         conn.close()
