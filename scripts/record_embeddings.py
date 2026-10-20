@@ -3,7 +3,8 @@
 Run once the embedding model is pinned (`models.embed`) and VOYAGE_API_KEY is set:
     uv run python scripts/record_embeddings.py
 Idempotent: texts already in tests/fixtures/recorded_embeddings.json are not re-embedded.
-Output: {text: vector}.
+Output: {"model", "documents": {text: vec}, "queries": {text: vec}}; documents and node
+names use embed_documents, questions use embed_query (as production does).
 """
 
 import json
@@ -17,8 +18,8 @@ OUT = FIXTURES / "recorded_embeddings.json"
 BATCH = 128
 
 
-def fixture_texts() -> list[str]:
-    """Every text the retrieval tests will embed, in a stable order, without duplicates."""
+def fixture_texts() -> tuple[list[str], list[str]]:
+    """(document texts + node names, questions) the retrieval tests embed; stable, deduped."""
     import make_fixture
     from kgrag.config import get_settings
     from kgrag.graph.build import _assemble
@@ -37,24 +38,36 @@ def fixture_texts() -> list[str]:
         for n in nodes.values() if n.get("name")
     ]
     questions = [q["question"] for q in json.loads((FIXTURES / "dev_questions.json").read_text())]
-    return list(dict.fromkeys(docs + names + questions))
+    return list(dict.fromkeys(docs + names)), list(dict.fromkeys(questions))
 
 
 def main() -> None:
+    from kgrag.config import get_settings
     from kgrag.retrieve.embeddings import EmbeddingsNotConfiguredError, get_embeddings
 
     try:
         emb = get_embeddings()
     except EmbeddingsNotConfiguredError as e:
         sys.exit(str(e))
-    recorded: dict[str, list[float]] = json.loads(OUT.read_text()) if OUT.exists() else {}
-    todo = [t for t in fixture_texts() if t not in recorded]
-    for i in range(0, len(todo), BATCH):
-        batch = todo[i : i + BATCH]
-        recorded.update(zip(batch, emb.embed_documents(batch), strict=True))
-        print(f"embedded {min(i + BATCH, len(todo))}/{len(todo)}")
-    OUT.write_text(json.dumps(recorded))
-    print(f"{len(recorded)} texts recorded ({len(todo)} new) -> {OUT}")
+    model = get_settings().models.embed
+    data = json.loads(OUT.read_text()) if OUT.exists() else {}
+    if data and data.get("model") != model:
+        sys.exit(f"{OUT.name} was recorded with {data.get('model')!r}, not {model!r}; delete it first")
+    data = {"model": model, "documents": data.get("documents", {}), "queries": data.get("queries", {})}
+    docs, queries = fixture_texts()
+    new = 0
+    for section, texts, embed in (
+        ("documents", docs, emb.embed_documents),
+        ("queries", queries, lambda b: [emb.embed_query(t) for t in b]),
+    ):
+        todo = [t for t in texts if t not in data[section]]
+        for i in range(0, len(todo), BATCH):
+            batch = todo[i : i + BATCH]
+            data[section].update(zip(batch, embed(batch), strict=True))
+            print(f"{section}: embedded {min(i + BATCH, len(todo))}/{len(todo)}")
+        new += len(todo)
+    OUT.write_text(json.dumps(data))
+    print(f"{len(data['documents'])} documents, {len(data['queries'])} queries ({new} new) -> {OUT}")
 
 
 if __name__ == "__main__":

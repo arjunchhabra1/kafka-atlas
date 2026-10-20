@@ -17,6 +17,7 @@ from kgrag.retrieve.embeddings import (
 )
 from kgrag.retrieve.index import build_index, open_stores
 from kgrag.retrieve.vector import VectorRetriever
+from kgrag.store.repo import get_documents
 from kgrag.tokens import count_tokens
 
 FIXTURES = Path(__file__).resolve().parents[1] / "fixtures"
@@ -64,10 +65,11 @@ def test_index_counts(indexed, slice_conn, neo4j_driver):
     n_docs = slice_conn.execute("select count(*) from documents").fetchone()[0]
     with neo4j_driver.session() as s:
         n_nodes = s.run(
-            "MATCH (n) WHERE NOT n:GraphMeta AND NOT n:Email RETURN count(n) AS c"
+            "MATCH (n) WHERE NOT n:GraphMeta AND NOT n:Email AND n.name IS NOT NULL "
+            "RETURN count(n) AS c"
         ).single()["c"]
-    assert indexed.chunks == n_docs > 0
-    assert indexed.node_names == n_nodes > 0
+    assert indexed.chunks.total == n_docs > 0
+    assert indexed.node_names.total == n_nodes > 0
 
 
 def test_retrieve_returns_gold_for_single_hop(indexed, slice_conn, dsn, embeddings):
@@ -91,6 +93,7 @@ def test_retrieve_within_budget(indexed, slice_conn, dsn, embeddings):
         res = VectorRetriever(chunks, slice_conn).retrieve("KIP-1043 consumer groups", 300)
     assert sum(count_tokens(e.text) for e in res.evidence) <= 300
     assert res.trace["k"] == 50 and res.trace["considered"] >= len(res.evidence)
+    assert res.trace["missing"] == 0
     assert all(0.0 <= abs(e.score) <= 1.0 + 1e-6 for e in res.evidence)
 
 
@@ -98,4 +101,85 @@ def test_index_incremental(indexed, slice_conn, neo4j_driver, dsn, embeddings):
     before = embeddings.docs_embedded
     again = build_index(slice_conn, neo4j_driver, connection=dsn)
     assert embeddings.docs_embedded == before
-    assert again == indexed
+    assert again.chunks.unchanged == indexed.chunks.total
+    assert (again.chunks.added, again.chunks.updated, again.chunks.deleted) == (0, 0, 0)
+    assert (again.node_names.added, again.node_names.updated, again.node_names.deleted) == (0, 0, 0)
+
+
+def test_evidence_text_and_score_order(indexed, slice_conn, dsn, embeddings):
+    with open_stores(dsn) as (chunks, _):
+        res = VectorRetriever(chunks, slice_conn).retrieve("KIP-1043 consumer groups", 4000)
+    assert len(res.evidence) > 1
+    scores = [e.score for e in res.evidence]
+    assert scores == sorted(scores, reverse=True)
+    stored = {d.doc_id: d.text for d in get_documents(slice_conn, [e.doc_id for e in res.evidence])}
+    assert all(e.text == stored[e.doc_id] for e in res.evidence)
+
+
+def test_missing_documents_are_reported(indexed, slice_conn, dsn, embeddings, caplog):
+    victim = slice_conn.execute("select doc_id from documents order by doc_id limit 1").fetchone()[0]
+    row, cols = _take_row(slice_conn, victim)
+    try:
+        with open_stores(dsn) as (chunks, _), caplog.at_level("WARNING"):
+            res = VectorRetriever(chunks, slice_conn).retrieve(row[cols.index("text")], 4000)
+        assert res.trace["missing"] == 1
+        assert "no row in documents" in caplog.text
+        assert victim not in {e.doc_id for e in res.evidence}
+    finally:
+        _put_row(slice_conn, row, cols)
+
+
+def _take_row(conn, doc_id):
+    cur = conn.execute("select * from documents where doc_id = %s", (doc_id,))
+    cols = [c.name for c in cur.description]
+    row = cur.fetchone()
+    conn.execute("delete from documents where doc_id = %s", (doc_id,))
+    conn.commit()
+    return row, cols
+
+
+def _put_row(conn, row, cols):
+    conn.execute(
+        f"insert into documents ({', '.join(cols)}) values ({', '.join(['%s'] * len(cols))})", row
+    )
+    conn.commit()
+
+
+def test_changed_text_reembeds_only_that_doc(indexed, slice_conn, neo4j_driver, dsn, embeddings):
+    doc_id, text = slice_conn.execute("select doc_id, text from documents order by doc_id limit 1").fetchone()
+    before = embeddings.docs_embedded
+    try:
+        slice_conn.execute("update documents set text = %s where doc_id = %s", (text + " changed", doc_id))
+        slice_conn.commit()
+        stats = build_index(slice_conn, neo4j_driver, connection=dsn)
+        assert (stats.chunks.updated, stats.chunks.added, stats.chunks.deleted) == (1, 0, 0)
+        assert stats.node_names.updated == 0
+        assert embeddings.docs_embedded - before == 1
+    finally:
+        slice_conn.execute("update documents set text = %s where doc_id = %s", (text, doc_id))
+        slice_conn.commit()
+        build_index(slice_conn, neo4j_driver, connection=dsn)
+
+
+def test_deleted_doc_is_removed(indexed, slice_conn, neo4j_driver, dsn, embeddings):
+    victim = slice_conn.execute("select doc_id from documents order by doc_id limit 1").fetchone()[0]
+    row, cols = _take_row(slice_conn, victim)
+    try:
+        stats = build_index(slice_conn, neo4j_driver, connection=dsn)
+        assert stats.chunks.deleted == 1 and stats.chunks.total == indexed.chunks.total - 1
+        with open_stores(dsn) as (chunks, _):
+            hits = chunks.similarity_search("kafka", k=500)
+        assert victim not in {h.metadata["doc_id"] for h in hits}
+    finally:
+        _put_row(slice_conn, row, cols)
+        assert build_index(slice_conn, neo4j_driver, connection=dsn).chunks.added == 1
+
+
+def test_model_change_reembeds_everything(indexed, slice_conn, neo4j_driver, dsn, embeddings):
+    stats = build_index(slice_conn, neo4j_driver, connection=dsn, model="other-model")
+    try:
+        assert stats.chunks.updated == indexed.chunks.total and stats.chunks.unchanged == 0
+        assert stats.node_names.updated == indexed.node_names.total
+    finally:
+        back = build_index(slice_conn, neo4j_driver, connection=dsn)
+        assert back.chunks.updated == indexed.chunks.total

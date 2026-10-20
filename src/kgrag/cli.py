@@ -250,7 +250,11 @@ def index() -> None:
     conn, driver = connect(), _neo4j_driver()
     try:
         apply_migrations(conn)
-        typer.echo(build_index(conn, driver))
+        stats = build_index(conn, driver)
+        for name in ("chunks", "node_names"):
+            c = getattr(stats, name)
+            typer.echo(f"{name}: {c.added} added, {c.updated} updated, {c.deleted} deleted, "
+                       f"{c.unchanged} unchanged ({c.total} indexed)")
     finally:
         conn.close()
         driver.close()

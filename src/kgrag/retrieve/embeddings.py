@@ -40,22 +40,30 @@ def set_embeddings_for_tests(e: Embeddings | None) -> None:
 
 
 class RecordedEmbeddings(Embeddings):
-    """Replays vectors recorded by scripts/record_embeddings.py; unknown text is an error."""
+    """Replays vectors from scripts/record_embeddings.py: {"model", "documents", "queries"}.
+
+    Documents and queries are separate because Voyage embeds them with different input types.
+    Unknown text is an error.
+    """
 
     def __init__(self, path: Path):
-        self.vectors: dict[str, list[float]] = json.loads(Path(path).read_text())
+        data = json.loads(Path(path).read_text())
+        self.model: str = data.get("model", "")
+        self.documents: dict[str, list[float]] = data["documents"]
+        self.queries: dict[str, list[float]] = data["queries"]
 
-    def _get(self, text: str) -> list[float]:
+    @staticmethod
+    def _get(table: dict[str, list[float]], kind: str, text: str) -> list[float]:
         try:
-            return self.vectors[text]
+            return table[text]
         except KeyError:
-            raise KeyError(f"text not in recorded embeddings: {text[:80]!r}") from None
+            raise KeyError(f"text not in recorded {kind} embeddings: {text[:80]!r}") from None
 
     def embed_documents(self, texts: list[str]) -> list[list[float]]:
-        return [self._get(t) for t in texts]
+        return [self._get(self.documents, "document", t) for t in texts]
 
     def embed_query(self, text: str) -> list[float]:
-        return self._get(text)
+        return self._get(self.queries, "query", text)
 
 
 class HashEmbeddings(Embeddings):

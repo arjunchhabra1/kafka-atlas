@@ -1,3 +1,5 @@
+import logging
+
 import psycopg
 from langchain_postgres import PGVector
 
@@ -7,6 +9,7 @@ from kgrag.retrieve.types import Evidence, RetrievalResult
 from kgrag.store.repo import get_documents
 
 K = 50
+log = logging.getLogger(__name__)
 
 
 class VectorRetriever:
@@ -25,7 +28,10 @@ class VectorRetriever:
             Evidence(doc_id=i, text=text[i], score=1.0 - dist)
             for i, (_, dist) in zip(ids, hits, strict=True) if i in text
         ]
+        missing = len(ids) - len(candidates)
+        if missing:
+            log.warning("%d of %d vector hits have no row in documents; reindex?", missing, len(ids))
         return RetrievalResult(
             evidence=pack_to_budget(candidates, budget_tokens),
-            trace={"k": K, "considered": len(candidates)},
+            trace={"k": K, "considered": len(candidates), "missing": missing},
         )
