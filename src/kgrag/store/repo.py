@@ -9,6 +9,7 @@ from pydantic import BaseModel
 
 from kgrag.extract.schema import AnchorHints, Mention
 from kgrag.ingest.jira import JiraEvent, render_event
+from kgrag.resolve.interface import Resolution
 from kgrag.tokens import count_tokens, split_tokens
 
 _PARAGRAPH = re.compile(r"\n[ \t]*\n")
@@ -266,3 +267,32 @@ def insert_question(conn: psycopg.Connection, q: QuestionRow) -> bool:
         q.model_dump(),
     )
     return cur.rowcount == 1
+
+
+def save_resolution(conn: psycopg.Connection, resolver_name: str, resolution: Resolution) -> None:
+    """Replace all stored rows for `resolver_name` with `resolution`, in one transaction."""
+    rows = [
+        (resolver_name, mid, eid, resolution.canonical_names[eid], resolution.entity_types[eid])
+        for mid, eid in sorted(resolution.assignments.items())
+    ]
+    with conn.transaction(), conn.cursor() as cur:
+        cur.execute("delete from resolutions where resolver = %s", (resolver_name,))
+        cur.executemany(
+            "insert into resolutions (resolver, mention_id, entity_id, canonical_name, "
+            "entity_type) values (%s, %s, %s, %s, %s)",
+            rows,
+        )
+
+
+def load_resolution(conn: psycopg.Connection, resolver_name: str) -> Resolution:
+    cur = conn.execute(
+        "select mention_id, entity_id, canonical_name, entity_type from resolutions "
+        "where resolver = %s order by mention_id",
+        (resolver_name,),
+    )
+    out = Resolution(assignments={}, canonical_names={}, entity_types={})
+    for mid, eid, name, etype in cur.fetchall():
+        out.assignments[mid] = eid
+        out.canonical_names[eid] = name
+        out.entity_types[eid] = etype
+    return out

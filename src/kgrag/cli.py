@@ -1,5 +1,7 @@
 import random
 import sys
+import time
+from collections import Counter
 from typing import Any
 
 import psycopg
@@ -20,7 +22,15 @@ from kgrag.questions.draft import avg_doc_tokens, draft_questions, estimate_draf
 from kgrag.questions.review import review_session
 from kgrag.questions.split import AlreadySplitError, persist_splits
 from kgrag.store.db import apply_migrations, connect
-from kgrag.store.repo import select_unextracted
+from kgrag.resolve.exact_match import ExactMatchResolver
+from kgrag.resolve.interface import resolve_all
+from kgrag.resolve.resolver import UserResolver
+from kgrag.store.repo import (
+    load_anchor_hints,
+    load_mentions,
+    save_resolution,
+    select_unextracted,
+)
 from kgrag.tokens import count_tokens
 
 app = typer.Typer(help="Kafka Atlas: knowledge-graph RAG over the Kafka mailing lists.", no_args_is_help=True)
@@ -126,6 +136,34 @@ def extract(
         typer.echo(persist_extractions(conn))
     finally:
         conn.close()
+
+
+@app.command()
+def resolve(
+    resolver: str = typer.Option("exact", help="Resolver to run: exact or user."),
+) -> None:
+    """Resolve all mentions into entities and store the result (replacing that resolver's rows)."""
+    resolvers = {"exact": ExactMatchResolver, "user": UserResolver}
+    if resolver not in resolvers:
+        raise typer.BadParameter(f"resolver must be one of {sorted(resolvers)}")
+    conn = connect()
+    try:
+        apply_migrations(conn)
+        mentions, hints = load_mentions(conn), load_anchor_hints(conn)
+        start = time.perf_counter()
+        try:
+            result = resolve_all(resolvers[resolver](), mentions, hints)
+        except NotImplementedError:
+            typer.echo("UserResolver not implemented yet — see src/kgrag/resolve/resolver.py")
+            raise typer.Exit(1) from None
+        elapsed = time.perf_counter() - start
+        save_resolution(conn, resolver, result)
+    finally:
+        conn.close()
+    typer.echo(f"{resolver}: {len(mentions)} mentions -> {len(result.canonical_names)} entities "
+               f"in {elapsed:.1f}s")
+    for etype, n in sorted(Counter(result.entity_types.values()).items()):
+        typer.echo(f"  {etype}: {n}")
 
 
 QUESTION_TYPES = ("single_hop", "inference", "comparison", "temporal", "null")
