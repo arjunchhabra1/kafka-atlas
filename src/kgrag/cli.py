@@ -175,9 +175,37 @@ def _neo4j_driver() -> Any:
     return GraphDatabase.driver(s.neo4j_uri, auth=(s.neo4j_user, s.neo4j_password))
 
 
+LOCAL_HOSTS = ("localhost", "127.0.0.1", "[::1]")
+
+
+def _guard_wipe(driver: Any, uri: str, force: bool, yes: bool) -> None:
+    """`build` clears the whole database: show the target and refuse unsafe wipes."""
+    from urllib.parse import urlparse
+
+    from kgrag.graph.build import read_graph_meta
+
+    meta = read_graph_meta(driver)
+    with driver.session() as s:
+        nodes = s.run("MATCH (n) RETURN count(n) AS c").single()["c"]
+    typer.echo(f"target: {uri}; current graph: "
+               + (f"built from '{meta.resolver}' at {meta.built_at:%Y-%m-%d %H:%M}, "
+                  f"{meta.node_count} nodes" if meta else f"no GraphMeta, {nodes} nodes"))
+    if nodes and meta is None and not force:
+        typer.echo("refusing to wipe a non-empty database that was not built by kgrag; "
+                   "pass --force to override")
+        raise typer.Exit(2)
+    if urlparse(uri).hostname not in {h.strip("[]") for h in LOCAL_HOSTS} and not yes:
+        if not sys.stdin.isatty():
+            typer.echo("remote Neo4j target: pass --yes to confirm the wipe")
+            raise typer.Exit(2)
+        typer.confirm(f"Wipe the database at {uri}?", abort=True)
+
+
 @app.command()
 def build(
     resolver: str = typer.Option("exact", help="Stored resolution to build from: exact or user."),
+    force: bool = typer.Option(False, "--force", help="Wipe a non-empty database lacking GraphMeta."),
+    yes: bool = typer.Option(False, "--yes", help="Confirm wiping a non-local Neo4j."),
 ) -> None:
     """Clear Neo4j and rebuild the knowledge graph from Postgres using a stored resolution."""
     if resolver not in ("exact", "user"):
@@ -185,6 +213,7 @@ def build(
     conn, driver = connect(), _neo4j_driver()
     try:
         apply_migrations(conn)
+        _guard_wipe(driver, get_settings().neo4j_uri, force, yes)
         start = time.perf_counter()
         try:
             stats = build_graph(conn, driver, resolver)
@@ -203,6 +232,8 @@ def build(
         typer.echo(f"  rel {rtype}: {n}")
     for reason, n in stats.skipped.items():
         typer.echo(f"  skipped {reason}: {n}")
+    for w in stats.warnings:
+        typer.echo(f"WARNING: {w}")
 
 
 @app.command("graph-check")
@@ -229,10 +260,14 @@ def graph_check(
     if fixture:
         from kgrag.graph.fixture_graph import fixture_graph
 
-        with fixture_graph(resolver) as fx_driver:
-            typer.echo("\nfixture graph\n" + format_connectivity(connectivity(fx_driver)))
-            typer.echo("\n" + format_reachability(
-                reachability(fx_driver, load_dev_questions(), hops)))
+        try:
+            with fixture_graph(resolver) as fx_driver:
+                typer.echo("\nfixture graph\n" + format_connectivity(connectivity(fx_driver)))
+                typer.echo("\n" + format_reachability(
+                    reachability(fx_driver, load_dev_questions(), hops)))
+        except NotImplementedError:
+            typer.echo("UserResolver not implemented yet — see src/kgrag/resolve/resolver.py")
+            raise typer.Exit(1) from None
 
 
 QUESTION_TYPES = ("single_hop", "inference", "comparison", "temporal", "null")

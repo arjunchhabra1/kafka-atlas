@@ -15,10 +15,10 @@ EDGE_RULES: dict[str, tuple[frozenset[str], frozenset[str]]] = {
     "RESOLVED": (frozenset({"Person"}), frozenset({"JiraTicket"})),
     "FIX_VERSION": (frozenset({"JiraTicket"}), frozenset({"Release"})),
     "PROPOSED": (frozenset({"Person"}), frozenset({"KIP"})),
-    "VOTED": (frozenset({"Person"}), frozenset({"KIP"})),
+    "VOTED": (frozenset({"Person"}), frozenset({"KIP", "Release"})),
     "REVIEWED": (frozenset({"Person"}), frozenset({"KIP", "JiraTicket"})),
     "BLOCKS": (frozenset({"KIP", "JiraTicket"}), frozenset({"Release"})),
-    "AFFECTS": (frozenset({"KIP", "JiraTicket"}), frozenset({"Component"})),
+    "AFFECTS": (frozenset({"KIP", "JiraTicket"}), frozenset({"Component", "Release"})),
     "DEPENDS_ON": (frozenset({"KIP"}), frozenset({"KIP"})),
     "SUPERSEDES": (frozenset({"KIP"}), frozenset({"KIP"})),
 }
@@ -38,3 +38,4 @@ class BuildStats:
     nodes: dict[str, int]
     rels: dict[str, int]
     skipped: dict[str, int] = field(default_factory=dict)  # reason -> count of dropped facts
+    warnings: list[str] = field(default_factory=list)

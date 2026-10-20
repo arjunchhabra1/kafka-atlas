@@ -59,8 +59,8 @@ def _ingest(conn: psycopg.Connection, mbox_paths: list[Path]) -> IngestStats:
     for p in paths:
         raw.extend(parse_mbox(p, on_skip=on_skip))
     emails = dedupe(raw)
-    thread_of = assign_threads(emails)
     parent_of = assign_parents(emails)
+    thread_of = assign_threads(emails, parent_of)
 
     by_id = {e.message_id: e for e in emails}
     members: dict[str, list[RawEmail]] = {}

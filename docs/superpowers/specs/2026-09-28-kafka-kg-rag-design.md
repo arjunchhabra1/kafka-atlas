@@ -129,10 +129,10 @@ Nodes: `Person`, `KIP`, `JiraTicket`, `Release`, `Component`, `Email`
 | `FILED`, `ASSIGNED`, `RESOLVED` | Person → JiraTicket | Jira events |
 | `FIX_VERSION` | JiraTicket → Release | Jira events |
 | `PROPOSED` | Person → KIP | LLM |
-| `VOTED` (value +1/0/−1, binding flag) | Person → KIP | LLM |
+| `VOTED` (value +1/0/−1, binding flag) | Person → KIP / Release | LLM |
 | `REVIEWED` | Person → KIP / JiraTicket | LLM |
 | `BLOCKS` | KIP / JiraTicket → Release | LLM |
-| `AFFECTS` | KIP / JiraTicket → Component | LLM |
+| `AFFECTS` | KIP / JiraTicket → Component / Release | LLM |
 | `DEPENDS_ON`, `SUPERSEDES` | KIP → KIP | LLM |
 
 Every edge carries `source_doc_ids`, `date`, `extractor` (`header | regex |

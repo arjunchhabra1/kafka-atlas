@@ -118,7 +118,7 @@ def upsert_emails(conn: psycopg.Connection, rows: list[EmailRow]) -> int:
             "thread_id = excluded.thread_id, date = excluded.date, "
             "sender_name = excluded.sender_name, sender_address = excluded.sender_address, "
             "subject = excluded.subject, body_clean = excluded.body_clean, kind = excluded.kind, "
-            "parent_message_id = excluded.parent_message_id",
+            "parent_message_id = coalesce(excluded.parent_message_id, emails.parent_message_id)",
             [r.model_dump() for r in rows],
         )
     return len(rows)

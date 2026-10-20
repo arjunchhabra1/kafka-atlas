@@ -190,14 +190,17 @@ def assign_parents(emails: list[RawEmail]) -> dict[str, str]:
     return parent
 
 
-def assign_threads(emails: list[RawEmail]) -> dict[str, str]:
+def assign_threads(
+    emails: list[RawEmail], parent: dict[str, str] | None = None
+) -> dict[str, str]:
     """Map message_id -> thread_id (the root message_id).
 
     The parent is In-Reply-To if present in `emails`, else the last
     References entry present. Messages whose parents are unknown are roots.
     """
     known = {e.message_id for e in emails}
-    parent = assign_parents(emails)
+    if parent is None:
+        parent = assign_parents(emails)
     threads = {}
     for mid in known:
         path = [mid]

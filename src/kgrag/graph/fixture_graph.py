@@ -44,7 +44,7 @@ def fixture_graph(resolver_name: str) -> Iterator[Driver]:
                                  load_anchor_hints(conn))
         save_resolution(conn, resolver_name, resolution)
         conn.commit()
-        with Neo4jContainer("neo4j:5") as neo:
+        with Neo4jContainer("neo4j:5.26") as neo:
             driver = GraphDatabase.driver(neo.get_connection_url(), auth=("neo4j", neo.password))
             try:
                 build_graph(conn, driver, resolver_name)

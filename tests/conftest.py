@@ -25,7 +25,7 @@ def neo4j_driver():
     from neo4j import GraphDatabase
     from testcontainers.community.neo4j import Neo4jContainer
 
-    with Neo4jContainer("neo4j:5") as neo:
+    with Neo4jContainer("neo4j:5.26") as neo:
         driver = GraphDatabase.driver(neo.get_connection_url(), auth=("neo4j", neo.password))
         driver.verify_connectivity()
         yield driver
