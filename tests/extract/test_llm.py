@@ -240,10 +240,10 @@ def test_estimate_cost_arithmetic():
     assert llm.COST_SAFETY_MARGIN == 1.3
     assert estimate_cost_usd(n, avg, MODEL, batch=False) == pytest.approx(expected)
     assert estimate_cost_usd(n, avg, MODEL) == pytest.approx(expected * 0.5)
-    assert llm.PROMPT_OVERHEAD_TOKENS > 0 and llm.EST_OUTPUT_TOKENS == 600
+    assert llm.PROMPT_OVERHEAD_TOKENS > 0 and llm.EST_OUTPUT_TOKENS == 240
     assert estimate_cost_usd(0, avg, MODEL) == 0
     assert estimate_cost_usd(10, 100, "claude-haiku-5-5", batch=False) == pytest.approx(
-        10 * ((100 + llm.PROMPT_OVERHEAD_TOKENS) * 0.10 + 600 * 0.50) / 1_000_000 * 1.3
+        10 * ((100 + llm.PROMPT_OVERHEAD_TOKENS) * 0.10 + 240 * 0.50) / 1_000_000 * 1.3
     )
 
 

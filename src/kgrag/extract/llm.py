@@ -27,8 +27,9 @@ from kgrag.store.repo import EmailRow, log_failure
 from kgrag.tokens import count_tokens
 
 MAX_TOKENS = 8000
-# Assumption: a typical response (a handful of mentions + relations as JSON) is ~600 tokens.
-EST_OUTPUT_TOKENS = 600
+# Measured: mean usage.output_tokens over the full Sonnet extract-v1 run (11,847 emails) was
+# 240.4 (the original pre-run assumption was 600).
+EST_OUTPUT_TOKENS = 240
 # Fixed per-request input: system prompt plus the schema the API injects. Computed once.
 # Multiplier on the estimate: covers thinking tokens, API header tokens and tokenizer
 # differences (we count with cl100k_base). Task 8's pilot calibrates it from stored usage.
