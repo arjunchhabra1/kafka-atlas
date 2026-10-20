@@ -1,0 +1,1916 @@
+{
+ "0d1bfd65083a1475": {
+  "container": null,
+  "content": [
+   {
+    "text": "{\"mentions\":[{\"local_id\":\"m1\",\"surface\":\"Apoorv Mittal\",\"type\":\"Person\",\"context\":\"Regards,\\nApoorv Mittal\"},{\"local_id\":\"m2\",\"surface\":\"KIP-1043\",\"type\":\"KIP\",\"context\":\"[VOTE] KIP-1043: Administration of groups\"},{\"local_id\":\"m3\",\"surface\":\"Andrew\",\"type\":\"Person\",\"context\":\"Hi Andrew,\"}],\"relations\":[{\"type\":\"VOTED\",\"source\":\"m1\",\"target\":\"m2\",\"vote_value\":1,\"binding\":false,\"confidence\":0.97},{\"type\":\"PROPOSED\",\"source\":\"m3\",\"target\":\"m2\",\"vote_value\":null,\"binding\":null,\"confidence\":0.6}]}",
+    "type": "text"
+   }
+  ],
+  "diagnostics": null,
+  "id": "msg_011CgD4B85ARuWyCGvk65HDP",
+  "model": "claude-sonnet-5-5",
+  "role": "assistant",
+  "stop_details": null,
+  "stop_reason": "end_turn",
+  "stop_sequence": null,
+  "type": "message",
+  "usage": {
+   "cache_creation": {
+    "ephemeral_1h_input_tokens": 0,
+    "ephemeral_5m_input_tokens": 0
+   },
+   "cache_creation_input_tokens": 0,
+   "cache_read_input_tokens": 1874,
+   "inference_geo": "global",
+   "input_tokens": 160,
+   "output_tokens": 246,
+   "output_tokens_details": {
+    "thinking_tokens": 0
+   },
+   "service_tier": "batch",
+   "speed": "standard"
+  }
+ },
+ "11997d173331b1ee": {
+  "container": null,
+  "content": [
+   {
+    "text": "{\"mentions\":[{\"local_id\":\"m1\",\"surface\":\"Lianet\",\"type\":\"Person\",\"context\":\"Thanks!\\n\\nLianet\"},{\"local_id\":\"m2\",\"surface\":\"Andrew\",\"type\":\"Person\",\"context\":\"Hello Andrew, thanks for considering the feedback.\"},{\"local_id\":\"m3\",\"surface\":\"KIP-1043\",\"type\":\"KIP\",\"context\":\"Thread subject: [DISCUSS] KIP-1043: Administration of groups\"}],\"relations\":[{\"type\":\"REVIEWED\",\"source\":\"m1\",\"target\":\"m3\",\"vote_value\":null,\"binding\":null,\"confidence\":0.8}]}",
+    "type": "text"
+   }
+  ],
+  "diagnostics": null,
+  "id": "msg_011CgD3fDdSwScSKpp2MVhkc",
+  "model": "claude-sonnet-5-5",
+  "role": "assistant",
+  "stop_details": null,
+  "stop_reason": "end_turn",
+  "stop_sequence": null,
+  "type": "message",
+  "usage": {
+   "cache_creation": {
+    "ephemeral_1h_input_tokens": 0,
+    "ephemeral_5m_input_tokens": 0
+   },
+   "cache_creation_input_tokens": 0,
+   "cache_read_input_tokens": 1874,
+   "inference_geo": "global",
+   "input_tokens": 1109,
+   "output_tokens": 213,
+   "output_tokens_details": {
+    "thinking_tokens": 0
+   },
+   "service_tier": "batch",
+   "speed": "standard"
+  }
+ },
+ "14e26cd0934e1d09": {
+  "container": null,
+  "content": [
+   {
+    "text": "{\"mentions\":[{\"local_id\":\"m1\",\"surface\":\"Kirk True\",\"type\":\"Person\",\"context\":\"From: Kirk True <kirk@kirktrue.pro>\"},{\"local_id\":\"m2\",\"surface\":\"Andrew\",\"type\":\"Person\",\"context\":\"Hi Andrew,\"},{\"local_id\":\"m3\",\"surface\":\"KIP-1043\",\"type\":\"KIP\",\"context\":\"Thread subject: [DISCUSS] KIP-1043: Administration of groups\"}],\"relations\":[{\"type\":\"REVIEWED\",\"source\":\"m1\",\"target\":\"m3\",\"vote_value\":null,\"binding\":null,\"confidence\":0.9},{\"type\":\"PROPOSED\",\"source\":\"m2\",\"target\":\"m3\",\"vote_value\":null,\"binding\":null,\"confidence\":0.7}]}",
+    "type": "text"
+   }
+  ],
+  "diagnostics": null,
+  "id": "msg_011CgD4AyrJooxTq9TJPEHvA",
+  "model": "claude-sonnet-5-5",
+  "role": "assistant",
+  "stop_details": null,
+  "stop_reason": "end_turn",
+  "stop_sequence": null,
+  "type": "message",
+  "usage": {
+   "cache_creation": {
+    "ephemeral_1h_input_tokens": 0,
+    "ephemeral_5m_input_tokens": 0
+   },
+   "cache_creation_input_tokens": 0,
+   "cache_read_input_tokens": 1874,
+   "inference_geo": "global",
+   "input_tokens": 682,
+   "output_tokens": 259,
+   "output_tokens_details": {
+    "thinking_tokens": 0
+   },
+   "service_tier": "batch",
+   "speed": "standard"
+  }
+ },
+ "182da09e3b823094": {
+  "container": null,
+  "content": [
+   {
+    "text": "{\"mentions\":[{\"local_id\":\"m1\",\"surface\":\"David Jacot\",\"type\":\"Person\",\"context\":\"From: David Jacot <djacot@confluent.io.invalid>\"},{\"local_id\":\"m2\",\"surface\":\"Andrew\",\"type\":\"Person\",\"context\":\"Thanks, Andrew. LGTM.\"},{\"local_id\":\"m3\",\"surface\":\"KIP-1043\",\"type\":\"KIP\",\"context\":\"Thread subject: [DISCUSS] KIP-1043: Administration of groups\"}],\"relations\":[{\"type\":\"REVIEWED\",\"source\":\"m1\",\"target\":\"m3\",\"vote_value\":null,\"binding\":null,\"confidence\":0.5},{\"type\":\"PROPOSED\",\"source\":\"m2\",\"target\":\"m3\",\"vote_value\":null,\"binding\":null,\"confidence\":0.5}]}",
+    "type": "text"
+   }
+  ],
+  "diagnostics": null,
+  "id": "msg_011CgD4F6zY3PSdJdyQQBMkK",
+  "model": "claude-sonnet-5-5",
+  "role": "assistant",
+  "stop_details": null,
+  "stop_reason": "end_turn",
+  "stop_sequence": null,
+  "type": "message",
+  "usage": {
+   "cache_creation": {
+    "ephemeral_1h_input_tokens": 0,
+    "ephemeral_5m_input_tokens": 0
+   },
+   "cache_creation_input_tokens": 0,
+   "cache_read_input_tokens": 1874,
+   "inference_geo": "global",
+   "input_tokens": 122,
+   "output_tokens": 266,
+   "output_tokens_details": {
+    "thinking_tokens": 0
+   },
+   "service_tier": "batch",
+   "speed": "standard"
+  }
+ },
+ "191353396e99757e": {
+  "container": null,
+  "content": [
+   {
+    "text": "{\"mentions\":[{\"local_id\":\"m1\",\"surface\":\"Apoorv Mittal\",\"type\":\"Person\",\"context\":\"Regards, Apoorv Mittal\"},{\"local_id\":\"m2\",\"surface\":\"Andrew\",\"type\":\"Person\",\"context\":\"Hi Andrew, Thanks for the KIP.\"},{\"local_id\":\"m3\",\"surface\":\"KIP-1043\",\"type\":\"KIP\",\"context\":\"Thread subject: [DISCUSS] KIP-1043: Administration of groups\"},{\"local_id\":\"m4\",\"surface\":\"KIP-848\",\"type\":\"KIP\",\"context\":\"AM2: Reading the notes on KIP-848, which requires `--consumer-property group.protocol=consumer` to enable modern consumer group.\"},{\"local_id\":\"m5\",\"surface\":\"GroupMetadataManager.java\",\"type\":\"Component\",\"context\":\"AM4: The GroupMetadataManager.java stores all groups in the same data structure which means the name has to be unique across different group types.\"}],\"relations\":[{\"type\":\"REVIEWED\",\"source\":\"m1\",\"target\":\"m3\",\"vote_value\":null,\"binding\":null,\"confidence\":0.9},{\"type\":\"PROPOSED\",\"source\":\"m2\",\"target\":\"m3\",\"vote_value\":null,\"binding\":null,\"confidence\":0.7}]}",
+    "type": "text"
+   }
+  ],
+  "diagnostics": null,
+  "id": "msg_011CgD3fE1mAEXvmBQSLo4wL",
+  "model": "claude-sonnet-5-5",
+  "role": "assistant",
+  "stop_details": null,
+  "stop_reason": "end_turn",
+  "stop_sequence": null,
+  "type": "message",
+  "usage": {
+   "cache_creation": {
+    "ephemeral_1h_input_tokens": 0,
+    "ephemeral_5m_input_tokens": 0
+   },
+   "cache_creation_input_tokens": 0,
+   "cache_read_input_tokens": 1874,
+   "inference_geo": "global",
+   "input_tokens": 825,
+   "output_tokens": 419,
+   "output_tokens_details": {
+    "thinking_tokens": 0
+   },
+   "service_tier": "batch",
+   "speed": "standard"
+  }
+ },
+ "195743a8a69aa1c8": {
+  "container": null,
+  "content": [
+   {
+    "text": "{\"mentions\":[{\"local_id\":\"m1\",\"surface\":\"Chia-Ping Tsai\",\"type\":\"Person\",\"context\":\"From: Chia-Ping Tsai <chia7712@gmail.com>\"},{\"local_id\":\"m2\",\"surface\":\"Chris\",\"type\":\"Person\",\"context\":\"hi Chris,\"},{\"local_id\":\"m3\",\"surface\":\"KAFKA-16096\",\"type\":\"JiraTicket\",\"context\":\"I'd like to review your PR, but we might need to resolve KAFKA-16096 first.\"},{\"local_id\":\"m4\",\"surface\":\"KIP-1032\",\"type\":\"KIP\",\"context\":\"Thread subject: PR review request for KIP-1032\"}],\"relations\":[{\"type\":\"REVIEWED\",\"source\":\"m1\",\"target\":\"m4\",\"vote_value\":null,\"binding\":null,\"confidence\":0.5},{\"type\":\"DEPENDS_ON\",\"source\":\"m4\",\"target\":\"m3\",\"vote_value\":null,\"binding\":null,\"confidence\":0.5}]}",
+    "type": "text"
+   }
+  ],
+  "diagnostics": null,
+  "id": "msg_011CgD3iJYxD9buibJGAx4bm",
+  "model": "claude-sonnet-5-5",
+  "role": "assistant",
+  "stop_details": null,
+  "stop_reason": "end_turn",
+  "stop_sequence": null,
+  "type": "message",
+  "usage": {
+   "cache_creation": {
+    "ephemeral_1h_input_tokens": 0,
+    "ephemeral_5m_input_tokens": 0
+   },
+   "cache_creation_input_tokens": 0,
+   "cache_read_input_tokens": 1874,
+   "inference_geo": "global",
+   "input_tokens": 244,
+   "output_tokens": 325,
+   "output_tokens_details": {
+    "thinking_tokens": 0
+   },
+   "service_tier": "batch",
+   "speed": "standard"
+  }
+ },
+ "19c925e2b7c2b7b4": {
+  "container": null,
+  "content": [
+   {
+    "text": "{\"mentions\":[{\"local_id\":\"m1\",\"surface\":\"Andrew Schofield\",\"type\":\"Person\",\"context\":\"From: Andrew Schofield <andrew_schofield@live.com>\"},{\"local_id\":\"m2\",\"surface\":\"Lianet\",\"type\":\"Person\",\"context\":\"Hi Lianet, Thanks for your comments.\"},{\"local_id\":\"m3\",\"surface\":\"KIP-1043\",\"type\":\"KIP\",\"context\":\"Thread subject: [DISCUSS] KIP-1043: Administration of groups\"},{\"local_id\":\"m4\",\"surface\":\"KIP\",\"type\":\"KIP\",\"context\":\"I’ll change the KIP to use this.\"}],\"relations\":[{\"type\":\"REVIEWED\",\"source\":\"m2\",\"target\":\"m3\",\"vote_value\":null,\"binding\":null,\"confidence\":0.6},{\"type\":\"PROPOSED\",\"source\":\"m1\",\"target\":\"m3\",\"vote_value\":null,\"binding\":null,\"confidence\":0.6}]}",
+    "type": "text"
+   }
+  ],
+  "diagnostics": null,
+  "id": "msg_011CgD3h5uQofFBoscJ6AoJC",
+  "model": "claude-sonnet-5-5",
+  "role": "assistant",
+  "stop_details": null,
+  "stop_reason": "end_turn",
+  "stop_sequence": null,
+  "type": "message",
+  "usage": {
+   "cache_creation": {
+    "ephemeral_1h_input_tokens": 0,
+    "ephemeral_5m_input_tokens": 0
+   },
+   "cache_creation_input_tokens": 0,
+   "cache_read_input_tokens": 1874,
+   "inference_geo": "global",
+   "input_tokens": 868,
+   "output_tokens": 314,
+   "output_tokens_details": {
+    "thinking_tokens": 0
+   },
+   "service_tier": "batch",
+   "speed": "standard"
+  }
+ },
+ "1a8cf3f2da0db1cd": {
+  "container": null,
+  "content": [
+   {
+    "text": "{\"mentions\":[{\"local_id\":\"m1\",\"surface\":\"4.0\",\"type\":\"Release\",\"context\":\"forgotten for the 4.0 release.\"},{\"local_id\":\"m2\",\"surface\":\"Jetty\",\"type\":\"Component\",\"context\":\"so I'll never forget your PR that is trying to save us from Jetty CVE hell!\"}],\"relations\":[]}",
+    "type": "text"
+   }
+  ],
+  "diagnostics": null,
+  "id": "msg_011CgD3jejutKzCtTBNEYXb7",
+  "model": "claude-sonnet-5-5",
+  "role": "assistant",
+  "stop_details": null,
+  "stop_reason": "end_turn",
+  "stop_sequence": null,
+  "type": "message",
+  "usage": {
+   "cache_creation": {
+    "ephemeral_1h_input_tokens": 0,
+    "ephemeral_5m_input_tokens": 0
+   },
+   "cache_creation_input_tokens": 0,
+   "cache_read_input_tokens": 1874,
+   "inference_geo": "global",
+   "input_tokens": 206,
+   "output_tokens": 116,
+   "output_tokens_details": {
+    "thinking_tokens": 0
+   },
+   "service_tier": "batch",
+   "speed": "standard"
+  }
+ },
+ "22b1a7f455942444": {
+  "container": null,
+  "content": [
+   {
+    "text": "{\"mentions\":[{\"local_id\":\"m1\",\"surface\":\"KIP-1043\",\"type\":\"KIP\",\"context\":\"This concludes the vote for KIP-1043.\"},{\"local_id\":\"m2\",\"surface\":\"David Jacot\",\"type\":\"Person\",\"context\":\"+1 (binding): David Jacot, Lianet Magrans, Lucas Brutschy, David Arthur\"},{\"local_id\":\"m3\",\"surface\":\"Lianet Magrans\",\"type\":\"Person\",\"context\":\"+1 (binding): David Jacot, Lianet Magrans, Lucas Brutschy, David Arthur\"},{\"local_id\":\"m4\",\"surface\":\"Lucas Brutschy\",\"type\":\"Person\",\"context\":\"+1 (binding): David Jacot, Lianet Magrans, Lucas Brutschy, David Arthur\"},{\"local_id\":\"m5\",\"surface\":\"David Arthur\",\"type\":\"Person\",\"context\":\"+1 (binding): David Jacot, Lianet Magrans, Lucas Brutschy, David Arthur\"},{\"local_id\":\"m6\",\"surface\":\"Apoorv Mittal\",\"type\":\"Person\",\"context\":\"+1 (non-binding): Apoorv Mittal\"},{\"local_id\":\"m7\",\"surface\":\"Apache Kafka 4.0\",\"type\":\"Release\",\"context\":\"I aim to get it implemented in Apache Kafka 4.0.\"},{\"local_id\":\"m8\",\"surface\":\"Andrew\",\"type\":\"Person\",\"context\":\"Thanks, Andrew\"}],\"relations\":[{\"type\":\"VOTED\",\"source\":\"m2\",\"target\":\"m1\",\"vote_value\":1,\"binding\":true,\"confidence\":0.95},{\"type\":\"VOTED\",\"source\":\"m3\",\"target\":\"m1\",\"vote_value\":1,\"binding\":true,\"confidence\":0.95},{\"type\":\"VOTED\",\"source\":\"m4\",\"target\":\"m1\",\"vote_value\":1,\"binding\":true,\"confidence\":0.95},{\"type\":\"VOTED\",\"source\":\"m5\",\"target\":\"m1\",\"vote_value\":1,\"binding\":true,\"confidence\":0.95},{\"type\":\"VOTED\",\"source\":\"m6\",\"target\":\"m1\",\"vote_value\":1,\"binding\":false,\"confidence\":0.95},{\"type\":\"AFFECTS\",\"source\":\"m1\",\"target\":\"m7\",\"vote_value\":null,\"binding\":null,\"confidence\":0.6}]}",
+    "type": "text"
+   }
+  ],
+  "diagnostics": null,
+  "id": "msg_011CgD3jbEpVccfQqdTZGNQC",
+  "model": "claude-sonnet-5-5",
+  "role": "assistant",
+  "stop_details": null,
+  "stop_reason": "end_turn",
+  "stop_sequence": null,
+  "type": "message",
+  "usage": {
+   "cache_creation": {
+    "ephemeral_1h_input_tokens": 0,
+    "ephemeral_5m_input_tokens": 0
+   },
+   "cache_creation_input_tokens": 0,
+   "cache_read_input_tokens": 1874,
+   "inference_geo": "global",
+   "input_tokens": 361,
+   "output_tokens": 759,
+   "output_tokens_details": {
+    "thinking_tokens": 0
+   },
+   "service_tier": "batch",
+   "speed": "standard"
+  }
+ },
+ "242b69f6b7633ac6": {
+  "container": null,
+  "content": [
+   {
+    "text": "{\"mentions\":[{\"local_id\":\"m1\",\"surface\":\"Lucas Brutschy\",\"type\":\"Person\",\"context\":\"From: Lucas Brutschy <lbrutschy@confluent.io.invalid>\"},{\"local_id\":\"m2\",\"surface\":\"Andrew\",\"type\":\"Person\",\"context\":\"Hi Andrew, thanks for the KIP!\"},{\"local_id\":\"m3\",\"surface\":\"KIP-1043\",\"type\":\"KIP\",\"context\":\"Thread subject: [DISCUSS] KIP-1043: Administration of groups\"}],\"relations\":[{\"type\":\"PROPOSED\",\"source\":\"m2\",\"target\":\"m3\",\"vote_value\":null,\"binding\":null,\"confidence\":0.7},{\"type\":\"REVIEWED\",\"source\":\"m1\",\"target\":\"m3\",\"vote_value\":null,\"binding\":null,\"confidence\":0.9}]}",
+    "type": "text"
+   }
+  ],
+  "diagnostics": null,
+  "id": "msg_011CgD4EXyBP1qXYjURQsafT",
+  "model": "claude-sonnet-5-5",
+  "role": "assistant",
+  "stop_details": null,
+  "stop_reason": "end_turn",
+  "stop_sequence": null,
+  "type": "message",
+  "usage": {
+   "cache_creation": {
+    "ephemeral_1h_input_tokens": 0,
+    "ephemeral_5m_input_tokens": 0
+   },
+   "cache_creation_input_tokens": 0,
+   "cache_read_input_tokens": 1874,
+   "inference_geo": "global",
+   "input_tokens": 337,
+   "output_tokens": 280,
+   "output_tokens_details": {
+    "thinking_tokens": 0
+   },
+   "service_tier": "batch",
+   "speed": "standard"
+  }
+ },
+ "2633bee2ddc7f195": {
+  "container": null,
+  "content": [
+   {
+    "text": "{\"mentions\":[{\"local_id\":\"m1\",\"surface\":\"Christopher Shannon\",\"type\":\"Person\",\"context\":\"From: Christopher Shannon <christopher.l.shannon@gmail.com>\"},{\"local_id\":\"m2\",\"surface\":\"KIP-1032\",\"type\":\"KIP\",\"context\":\"[DISCUSS] KIP-1032: Upgrade to Jakarta and JavaEE 9 in Kafka 4.0\"},{\"local_id\":\"m3\",\"surface\":\"4.0\",\"type\":\"Release\",\"context\":\"I just wanted to bump this and see if anyone had more feedback before trying to call a vote for this for 4.0?\"}],\"relations\":[{\"type\":\"PROPOSED\",\"source\":\"m1\",\"target\":\"m2\",\"vote_value\":null,\"binding\":null,\"confidence\":0.6},{\"type\":\"AFFECTS\",\"source\":\"m2\",\"target\":\"m3\",\"vote_value\":null,\"binding\":null,\"confidence\":0.5}]}",
+    "type": "text"
+   }
+  ],
+  "diagnostics": null,
+  "id": "msg_011CgD3fAf6zpady4zHK3AsQ",
+  "model": "claude-sonnet-5-5",
+  "role": "assistant",
+  "stop_details": null,
+  "stop_reason": "end_turn",
+  "stop_sequence": null,
+  "type": "message",
+  "usage": {
+   "cache_creation": {
+    "ephemeral_1h_input_tokens": 0,
+    "ephemeral_5m_input_tokens": 0
+   },
+   "cache_creation_input_tokens": 0,
+   "cache_read_input_tokens": 1874,
+   "inference_geo": "global",
+   "input_tokens": 199,
+   "output_tokens": 312,
+   "output_tokens_details": {
+    "thinking_tokens": 0
+   },
+   "service_tier": "batch",
+   "speed": "standard"
+  }
+ },
+ "2699a417f0566d85": {
+  "container": null,
+  "content": [
+   {
+    "text": "{\"mentions\":[{\"local_id\":\"m1\",\"surface\":\"David Jacot\",\"type\":\"Person\",\"context\":\"From: David Jacot <djacot@confluent.io.invalid>\"},{\"local_id\":\"m2\",\"surface\":\"Andrew\",\"type\":\"Person\",\"context\":\"Hi Andrew,\"},{\"local_id\":\"m3\",\"surface\":\"KIP-1043\",\"type\":\"KIP\",\"context\":\"Thread subject: [DISCUSS] KIP-1043: Administration of groups\"}],\"relations\":[{\"type\":\"REVIEWED\",\"source\":\"m1\",\"target\":\"m3\",\"vote_value\":null,\"binding\":null,\"confidence\":0.9},{\"type\":\"PROPOSED\",\"source\":\"m2\",\"target\":\"m3\",\"vote_value\":null,\"binding\":null,\"confidence\":0.8}]}",
+    "type": "text"
+   }
+  ],
+  "diagnostics": null,
+  "id": "msg_011CgD3iQbam8fGFP9gdWA7G",
+  "model": "claude-sonnet-5-5",
+  "role": "assistant",
+  "stop_details": null,
+  "stop_reason": "end_turn",
+  "stop_sequence": null,
+  "type": "message",
+  "usage": {
+   "cache_creation": {
+    "ephemeral_1h_input_tokens": 0,
+    "ephemeral_5m_input_tokens": 0
+   },
+   "cache_creation_input_tokens": 0,
+   "cache_read_input_tokens": 1874,
+   "inference_geo": "global",
+   "input_tokens": 1029,
+   "output_tokens": 260,
+   "output_tokens_details": {
+    "thinking_tokens": 0
+   },
+   "service_tier": "batch",
+   "speed": "standard"
+  }
+ },
+ "2ad9d7c8cdbf48e1": {
+  "container": null,
+  "content": [
+   {
+    "text": "{\"mentions\":[{\"local_id\":\"m1\",\"surface\":\"David Jacot\",\"type\":\"Person\",\"context\":\"From: David Jacot <djacot@confluent.io.invalid>\"},{\"local_id\":\"m2\",\"surface\":\"Andrew\",\"type\":\"Person\",\"context\":\"Hi Andrew,\"},{\"local_id\":\"m3\",\"surface\":\"KIP-1043\",\"type\":\"KIP\",\"context\":\"Thread subject: [DISCUSS] KIP-1043: Administration of groups\"}],\"relations\":[{\"type\":\"REVIEWED\",\"source\":\"m1\",\"target\":\"m3\",\"vote_value\":null,\"binding\":null,\"confidence\":0.9}]}",
+    "type": "text"
+   }
+  ],
+  "diagnostics": null,
+  "id": "msg_011CgD3okDgT7TvXMurgzJDe",
+  "model": "claude-sonnet-5-5",
+  "role": "assistant",
+  "stop_details": null,
+  "stop_reason": "end_turn",
+  "stop_sequence": null,
+  "type": "message",
+  "usage": {
+   "cache_creation": {
+    "ephemeral_1h_input_tokens": 0,
+    "ephemeral_5m_input_tokens": 0
+   },
+   "cache_creation_input_tokens": 0,
+   "cache_read_input_tokens": 1874,
+   "inference_geo": "global",
+   "input_tokens": 853,
+   "output_tokens": 214,
+   "output_tokens_details": {
+    "thinking_tokens": 0
+   },
+   "service_tier": "batch",
+   "speed": "standard"
+  }
+ },
+ "2c24ed0bf877a2b8": {
+  "container": null,
+  "content": [
+   {
+    "text": "{\"mentions\":[{\"local_id\":\"m1\",\"surface\":\"Lianet\",\"type\":\"Person\",\"context\":\"Thanks!\\n\\nLianet\"},{\"local_id\":\"m2\",\"surface\":\"Andrew\",\"type\":\"Person\",\"context\":\"Hi Andrew,\"},{\"local_id\":\"m3\",\"surface\":\"KIP-1043\",\"type\":\"KIP\",\"context\":\"[DISCUSS] KIP-1043: Administration of groups\"},{\"local_id\":\"m4\",\"surface\":\"Lucas\",\"type\":\"Person\",\"context\":\"Also agree with the 2 minor points made by Lucas.\"}],\"relations\":[{\"type\":\"REVIEWED\",\"source\":\"m1\",\"target\":\"m3\",\"vote_value\":null,\"binding\":null,\"confidence\":0.9}]}",
+    "type": "text"
+   }
+  ],
+  "diagnostics": null,
+  "id": "msg_011CgD3gpHocgCRXLDEUbFtq",
+  "model": "claude-sonnet-5-5",
+  "role": "assistant",
+  "stop_details": null,
+  "stop_reason": "end_turn",
+  "stop_sequence": null,
+  "type": "message",
+  "usage": {
+   "cache_creation": {
+    "ephemeral_1h_input_tokens": 0,
+    "ephemeral_5m_input_tokens": 0
+   },
+   "cache_creation_input_tokens": 0,
+   "cache_read_input_tokens": 1874,
+   "inference_geo": "global",
+   "input_tokens": 255,
+   "output_tokens": 245,
+   "output_tokens_details": {
+    "thinking_tokens": 0
+   },
+   "service_tier": "batch",
+   "speed": "standard"
+  }
+ },
+ "2d9c5c5efa057176": {
+  "container": null,
+  "content": [
+   {
+    "text": "{\"mentions\":[{\"local_id\":\"m1\",\"surface\":\"Lianet\",\"type\":\"Person\",\"context\":\"Lianet\"},{\"local_id\":\"m2\",\"surface\":\"Andrew\",\"type\":\"Person\",\"context\":\"Hey Andrew, thanks for the KIP, we definitely need visibility from a higher level now that groups are growing.\"},{\"local_id\":\"m3\",\"surface\":\"KIP-1043\",\"type\":\"KIP\",\"context\":\"Thread subject: [DISCUSS] KIP-1043: Administration of groups\"}],\"relations\":[{\"type\":\"REVIEWED\",\"source\":\"m1\",\"target\":\"m3\",\"vote_value\":null,\"binding\":null,\"confidence\":0.9},{\"type\":\"PROPOSED\",\"source\":\"m2\",\"target\":\"m3\",\"vote_value\":null,\"binding\":null,\"confidence\":0.8}]}",
+    "type": "text"
+   }
+  ],
+  "diagnostics": null,
+  "id": "msg_011CgD43h16ZYzYM6b6q5xqz",
+  "model": "claude-sonnet-5-5",
+  "role": "assistant",
+  "stop_details": null,
+  "stop_reason": "end_turn",
+  "stop_sequence": null,
+  "type": "message",
+  "usage": {
+   "cache_creation": {
+    "ephemeral_1h_input_tokens": 0,
+    "ephemeral_5m_input_tokens": 0
+   },
+   "cache_creation_input_tokens": 0,
+   "cache_read_input_tokens": 1874,
+   "inference_geo": "global",
+   "input_tokens": 776,
+   "output_tokens": 270,
+   "output_tokens_details": {
+    "thinking_tokens": 0
+   },
+   "service_tier": "batch",
+   "speed": "standard"
+  }
+ },
+ "2f2a70d3d73ecb04": {
+  "container": null,
+  "content": [
+   {
+    "text": "{\"mentions\":[{\"local_id\":\"m1\",\"surface\":\"Andrew Schofield\",\"type\":\"Person\",\"context\":\"From: Andrew Schofield <andrew_schofield_jira@outlook.com>\"},{\"local_id\":\"m2\",\"surface\":\"David\",\"type\":\"Person\",\"context\":\"Hi David,\"},{\"local_id\":\"m3\",\"surface\":\"KIP-1043\",\"type\":\"KIP\",\"context\":\"Subject: Re: [DISCUSS] KIP-1043: Administration of groups\"},{\"local_id\":\"m4\",\"surface\":\"David Jacot\",\"type\":\"Person\",\"context\":\"From: David Jacot <djacot@confluent.io.INVALID>\"}],\"relations\":[{\"type\":\"REVIEWED\",\"source\":\"m1\",\"target\":\"m3\",\"vote_value\":null,\"binding\":null,\"confidence\":0.6},{\"type\":\"REVIEWED\",\"source\":\"m4\",\"target\":\"m3\",\"vote_value\":null,\"binding\":null,\"confidence\":0.7}]}",
+    "type": "text"
+   }
+  ],
+  "diagnostics": null,
+  "id": "msg_011CgD3fJsTxswgpAhUZ7Hcc",
+  "model": "claude-sonnet-5-5",
+  "role": "assistant",
+  "stop_details": null,
+  "stop_reason": "end_turn",
+  "stop_sequence": null,
+  "type": "message",
+  "usage": {
+   "cache_creation": {
+    "ephemeral_1h_input_tokens": 0,
+    "ephemeral_5m_input_tokens": 0
+   },
+   "cache_creation_input_tokens": 0,
+   "cache_read_input_tokens": 1874,
+   "inference_geo": "global",
+   "input_tokens": 1623,
+   "output_tokens": 318,
+   "output_tokens_details": {
+    "thinking_tokens": 0
+   },
+   "service_tier": "batch",
+   "speed": "standard"
+  }
+ },
+ "3e3aaca1d9ee83b5": {
+  "container": null,
+  "content": [
+   {
+    "text": "{\"mentions\":[{\"local_id\":\"m1\",\"surface\":\"Lianet\",\"type\":\"Person\",\"context\":\"Lianet\"},{\"local_id\":\"m2\",\"surface\":\"KIP-1043\",\"type\":\"KIP\",\"context\":\"[VOTE] KIP-1043: Administration of groups\"},{\"local_id\":\"m3\",\"surface\":\"Andrew\",\"type\":\"Person\",\"context\":\"Hello Andrew,\"}],\"relations\":[{\"type\":\"VOTED\",\"source\":\"m1\",\"target\":\"m2\",\"vote_value\":1,\"binding\":true,\"confidence\":0.97}]}",
+    "type": "text"
+   }
+  ],
+  "diagnostics": null,
+  "id": "msg_011CgD3iGXA6wBnV3VxaTPfV",
+  "model": "claude-sonnet-5-5",
+  "role": "assistant",
+  "stop_details": null,
+  "stop_reason": "end_turn",
+  "stop_sequence": null,
+  "type": "message",
+  "usage": {
+   "cache_creation": {
+    "ephemeral_1h_input_tokens": 0,
+    "ephemeral_5m_input_tokens": 0
+   },
+   "cache_creation_input_tokens": 0,
+   "cache_read_input_tokens": 1874,
+   "inference_geo": "global",
+   "input_tokens": 134,
+   "output_tokens": 185,
+   "output_tokens_details": {
+    "thinking_tokens": 0
+   },
+   "service_tier": "batch",
+   "speed": "standard"
+  }
+ },
+ "41671634bd35ba7c": {
+  "container": null,
+  "content": [
+   {
+    "text": "{\"mentions\":[{\"local_id\":\"m1\",\"surface\":\"Christopher Shannon\",\"type\":\"Person\",\"context\":\"* 1 non-binding vote (Christopher Shannon)\"},{\"local_id\":\"m2\",\"surface\":\"KIP-1032\",\"type\":\"KIP\",\"context\":\"[VOTE]: KIP-1032: Upgrade to Jakarta and JavaEE 10 in Kafka 4.0\"},{\"local_id\":\"m3\",\"surface\":\"Chris Egerton\",\"type\":\"Person\",\"context\":\"* 3 binding votes (Chris Egerton, Mickael Maison, Greg Harris)\"},{\"local_id\":\"m4\",\"surface\":\"Mickael Maison\",\"type\":\"Person\",\"context\":\"* 3 binding votes (Chris Egerton, Mickael Maison, Greg Harris)\"},{\"local_id\":\"m5\",\"surface\":\"Greg Harris\",\"type\":\"Person\",\"context\":\"* 3 binding votes (Chris Egerton, Mickael Maison, Greg Harris)\"}],\"relations\":[{\"type\":\"VOTED\",\"source\":\"m1\",\"target\":\"m2\",\"vote_value\":1,\"binding\":false,\"confidence\":0.95},{\"type\":\"VOTED\",\"source\":\"m3\",\"target\":\"m2\",\"vote_value\":1,\"binding\":true,\"confidence\":0.8},{\"type\":\"VOTED\",\"source\":\"m4\",\"target\":\"m2\",\"vote_value\":1,\"binding\":true,\"confidence\":0.8},{\"type\":\"VOTED\",\"source\":\"m5\",\"target\":\"m2\",\"vote_value\":1,\"binding\":true,\"confidence\":0.8}]}",
+    "type": "text"
+   }
+  ],
+  "diagnostics": null,
+  "id": "msg_011CgD3fZyoeoQw9b9nzGNhh",
+  "model": "claude-sonnet-5-5",
+  "role": "assistant",
+  "stop_details": null,
+  "stop_reason": "end_turn",
+  "stop_sequence": null,
+  "type": "message",
+  "usage": {
+   "cache_creation": {
+    "ephemeral_1h_input_tokens": 0,
+    "ephemeral_5m_input_tokens": 0
+   },
+   "cache_creation_input_tokens": 0,
+   "cache_read_input_tokens": 1874,
+   "inference_geo": "global",
+   "input_tokens": 296,
+   "output_tokens": 517,
+   "output_tokens_details": {
+    "thinking_tokens": 0
+   },
+   "service_tier": "batch",
+   "speed": "standard"
+  }
+ },
+ "48d54cb168185c71": {
+  "container": null,
+  "content": [
+   {
+    "text": "{\"mentions\":[{\"local_id\":\"m1\",\"surface\":\"Christopher Shannon\",\"type\":\"Person\",\"context\":\"From: Christopher Shannon <christopher.l.shannon@gmail.com>\"},{\"local_id\":\"m2\",\"surface\":\"KIP-1032\",\"type\":\"KIP\",\"context\":\"Thread subject: [DISCUSS] KIP-1032: Upgrade to Jakarta and JavaEE 9 in Kafka 4.0\"},{\"local_id\":\"m3\",\"surface\":\"Jetty 12\",\"type\":\"Component\",\"context\":\"It's just something I noticed that we will need to pick because Jetty 12 supports multiple versions so it would affect which spec jars we use.\"},{\"local_id\":\"m4\",\"surface\":\"Kafka 4.0\",\"type\":\"Release\",\"context\":\"Upgrade to Jakarta and JavaEE 9 in Kafka 4.0\"},{\"local_id\":\"m5\",\"surface\":\"Greg\",\"type\":\"Person\",\"context\":\"Greg,\"}],\"relations\":[{\"type\":\"REVIEWED\",\"source\":\"m1\",\"target\":\"m2\",\"vote_value\":null,\"binding\":null,\"confidence\":0.6},{\"type\":\"AFFECTS\",\"source\":\"m2\",\"target\":\"m4\",\"vote_value\":null,\"binding\":null,\"confidence\":0.5},{\"type\":\"DEPENDS_ON\",\"source\":\"m2\",\"target\":\"m3\",\"vote_value\":null,\"binding\":null,\"confidence\":0.5}]}",
+    "type": "text"
+   }
+  ],
+  "diagnostics": null,
+  "id": "msg_011CgD3fBirKAHBCc9a6Nd9v",
+  "model": "claude-sonnet-5-5",
+  "role": "assistant",
+  "stop_details": null,
+  "stop_reason": "end_turn",
+  "stop_sequence": null,
+  "type": "message",
+  "usage": {
+   "cache_creation": {
+    "ephemeral_1h_input_tokens": 0,
+    "ephemeral_5m_input_tokens": 0
+   },
+   "cache_creation_input_tokens": 0,
+   "cache_read_input_tokens": 1874,
+   "inference_geo": "global",
+   "input_tokens": 708,
+   "output_tokens": 472,
+   "output_tokens_details": {
+    "thinking_tokens": 0
+   },
+   "service_tier": "batch",
+   "speed": "standard"
+  }
+ },
+ "49292277b2765e0b": {
+  "container": null,
+  "content": [
+   {
+    "text": "{\"mentions\":[{\"local_id\":\"m1\",\"surface\":\"Chris\",\"type\":\"Person\",\"context\":\"Chris\"},{\"local_id\":\"m2\",\"surface\":\"KIP-1032\",\"type\":\"KIP\",\"context\":\"Thanks, I missed that, I can update the KIP tomorrow to include that.\"}],\"relations\":[{\"type\":\"PROPOSED\",\"source\":\"m1\",\"target\":\"m2\",\"vote_value\":null,\"binding\":null,\"confidence\":0.6}]}",
+    "type": "text"
+   }
+  ],
+  "diagnostics": null,
+  "id": "msg_011CgD3fSZKoX6V5srq4gERr",
+  "model": "claude-sonnet-5-5",
+  "role": "assistant",
+  "stop_details": null,
+  "stop_reason": "end_turn",
+  "stop_sequence": null,
+  "type": "message",
+  "usage": {
+   "cache_creation": {
+    "ephemeral_1h_input_tokens": 0,
+    "ephemeral_5m_input_tokens": 0
+   },
+   "cache_creation_input_tokens": 0,
+   "cache_read_input_tokens": 1874,
+   "inference_geo": "global",
+   "input_tokens": 188,
+   "output_tokens": 153,
+   "output_tokens_details": {
+    "thinking_tokens": 0
+   },
+   "service_tier": "batch",
+   "speed": "standard"
+  }
+ },
+ "511c74de22f27827": {
+  "container": null,
+  "content": [
+   {
+    "text": "{\"mentions\":[{\"local_id\":\"m1\",\"surface\":\"David Jacot\",\"type\":\"Person\",\"context\":\"From: David Jacot <djacot@confluent.io.invalid>\"},{\"local_id\":\"m2\",\"surface\":\"KIP-1043\",\"type\":\"KIP\",\"context\":\"[VOTE] KIP-1043: Administration of groups\"}],\"relations\":[{\"type\":\"VOTED\",\"source\":\"m1\",\"target\":\"m2\",\"vote_value\":1,\"binding\":true,\"confidence\":0.97}]}",
+    "type": "text"
+   }
+  ],
+  "diagnostics": null,
+  "id": "msg_011CgD3joH7v3ZGnJJfzFyJc",
+  "model": "claude-sonnet-5-5",
+  "role": "assistant",
+  "stop_details": null,
+  "stop_reason": "end_turn",
+  "stop_sequence": null,
+  "type": "message",
+  "usage": {
+   "cache_creation": {
+    "ephemeral_1h_input_tokens": 0,
+    "ephemeral_5m_input_tokens": 0
+   },
+   "cache_creation_input_tokens": 0,
+   "cache_read_input_tokens": 1874,
+   "inference_geo": "global",
+   "input_tokens": 134,
+   "output_tokens": 166,
+   "output_tokens_details": {
+    "thinking_tokens": 0
+   },
+   "service_tier": "batch",
+   "speed": "standard"
+  }
+ },
+ "59e59c14e8b73ada": {
+  "container": null,
+  "content": [
+   {
+    "text": "{\"mentions\":[{\"local_id\":\"m1\",\"surface\":\"Lianet\",\"type\":\"Person\",\"context\":\"Thanks,\\nLianet\"},{\"local_id\":\"m2\",\"surface\":\"Andrew\",\"type\":\"Person\",\"context\":\"Hello Andrew,\"},{\"local_id\":\"m3\",\"surface\":\"KIP-1071\",\"type\":\"KIP\",\"context\":\"Bringing here the point I surfaced on the KIP-1071 thread:\"},{\"local_id\":\"m4\",\"surface\":\"KIP-1043\",\"type\":\"KIP\",\"context\":\"Thread subject: [DISCUSS] KIP-1043: Administration of groups\"}],\"relations\":[{\"type\":\"REVIEWED\",\"source\":\"m1\",\"target\":\"m4\",\"vote_value\":null,\"binding\":null,\"confidence\":0.8},{\"type\":\"REVIEWED\",\"source\":\"m1\",\"target\":\"m3\",\"vote_value\":null,\"binding\":null,\"confidence\":0.5}]}",
+    "type": "text"
+   }
+  ],
+  "diagnostics": null,
+  "id": "msg_011CgD3fDC9dFLDCGoB8i1tf",
+  "model": "claude-sonnet-5-5",
+  "role": "assistant",
+  "stop_details": null,
+  "stop_reason": "end_turn",
+  "stop_sequence": null,
+  "type": "message",
+  "usage": {
+   "cache_creation": {
+    "ephemeral_1h_input_tokens": 0,
+    "ephemeral_5m_input_tokens": 0
+   },
+   "cache_creation_input_tokens": 0,
+   "cache_read_input_tokens": 1874,
+   "inference_geo": "global",
+   "input_tokens": 478,
+   "output_tokens": 304,
+   "output_tokens_details": {
+    "thinking_tokens": 0
+   },
+   "service_tier": "batch",
+   "speed": "standard"
+  }
+ },
+ "5a7b8d853f8c7fff": {
+  "container": null,
+  "content": [
+   {
+    "text": "{\"mentions\":[{\"local_id\":\"m1\",\"surface\":\"Christopher Shannon\",\"type\":\"Person\",\"context\":\"From: Christopher Shannon\"},{\"local_id\":\"m2\",\"surface\":\"Greg\",\"type\":\"Person\",\"context\":\"Hi Greg,\"},{\"local_id\":\"m3\",\"surface\":\"KIP-1032\",\"type\":\"KIP\",\"context\":\"[DISCUSS] KIP-1032: Upgrade to Jakarta and JavaEE 9 in Kafka 4.0\"},{\"local_id\":\"m4\",\"surface\":\"Kafka 4.0\",\"type\":\"Release\",\"context\":\"[DISCUSS] KIP-1032: Upgrade to Jakarta and JavaEE 9 in Kafka 4.0\"}],\"relations\":[{\"type\":\"PROPOSED\",\"source\":\"m1\",\"target\":\"m3\",\"vote_value\":null,\"binding\":null,\"confidence\":0.6},{\"type\":\"AFFECTS\",\"source\":\"m3\",\"target\":\"m4\",\"vote_value\":null,\"binding\":null,\"confidence\":0.6}]}",
+    "type": "text"
+   }
+  ],
+  "diagnostics": null,
+  "id": "msg_011CgD4BKchYxo45EucQQ3dB",
+  "model": "claude-sonnet-5-5",
+  "role": "assistant",
+  "stop_details": null,
+  "stop_reason": "end_turn",
+  "stop_sequence": null,
+  "type": "message",
+  "usage": {
+   "cache_creation": {
+    "ephemeral_1h_input_tokens": 0,
+    "ephemeral_5m_input_tokens": 0
+   },
+   "cache_creation_input_tokens": 0,
+   "cache_read_input_tokens": 1874,
+   "inference_geo": "global",
+   "input_tokens": 230,
+   "output_tokens": 344,
+   "output_tokens_details": {
+    "thinking_tokens": 0
+   },
+   "service_tier": "batch",
+   "speed": "standard"
+  }
+ },
+ "5c611bc8a42c8052": {
+  "container": null,
+  "content": [
+   {
+    "text": "{\"mentions\":[{\"local_id\":\"m1\",\"surface\":\"Andrew\",\"type\":\"Person\",\"context\":\"Thanks, Andrew\"},{\"local_id\":\"m2\",\"surface\":\"KIP-1043\",\"type\":\"KIP\",\"context\":\"Re: [DISCUSS] KIP-1043: Administration of groups\"},{\"local_id\":\"m3\",\"surface\":\"Lianet\",\"type\":\"Person\",\"context\":\"Hi Lianet, Thanks for your comment.\"},{\"local_id\":\"m4\",\"surface\":\"KIP-848\",\"type\":\"KIP\",\"context\":\"It's a bit fiddly because of the introduction of the modern consumer groups by KIP-848 and the need for the admin client to cope with both kinds of consumer groups and older brokers.\"}],\"relations\":[{\"type\":\"PROPOSED\",\"source\":\"m1\",\"target\":\"m2\",\"vote_value\":null,\"binding\":null,\"confidence\":0.9}]}",
+    "type": "text"
+   }
+  ],
+  "diagnostics": null,
+  "id": "msg_011CgD43ZYsom3GJGrNBCbwY",
+  "model": "claude-sonnet-5-5",
+  "role": "assistant",
+  "stop_details": null,
+  "stop_reason": "end_turn",
+  "stop_sequence": null,
+  "type": "message",
+  "usage": {
+   "cache_creation": {
+    "ephemeral_1h_input_tokens": 0,
+    "ephemeral_5m_input_tokens": 0
+   },
+   "cache_creation_input_tokens": 0,
+   "cache_read_input_tokens": 1874,
+   "inference_geo": "global",
+   "input_tokens": 1078,
+   "output_tokens": 295,
+   "output_tokens_details": {
+    "thinking_tokens": 0
+   },
+   "service_tier": "batch",
+   "speed": "standard"
+  }
+ },
+ "5ef32672eac6a474": {
+  "container": null,
+  "content": [
+   {
+    "text": "{\"mentions\":[{\"local_id\":\"m1\",\"surface\":\"Chia-Ping\",\"type\":\"Person\",\"context\":\"Hi Chia-Ping,\"},{\"local_id\":\"m2\",\"surface\":\"KAFKA-16096\",\"type\":\"JiraTicket\",\"context\":\"so no problem if needing to resolve KAFKA-16096 first.\"},{\"local_id\":\"m3\",\"surface\":\"4.0\",\"type\":\"Release\",\"context\":\"I just wanted to make sure it doesn't get forgotten for the 4.0 release.\"},{\"local_id\":\"m4\",\"surface\":\"KIP-1032\",\"type\":\"KIP\",\"context\":\"Thread subject: PR review request for KIP-1032\"}],\"relations\":[{\"type\":\"AFFECTS\",\"source\":\"m4\",\"target\":\"m3\",\"vote_value\":null,\"binding\":null,\"confidence\":0.5},{\"type\":\"DEPENDS_ON\",\"source\":\"m4\",\"target\":\"m2\",\"vote_value\":null,\"binding\":null,\"confidence\":0.4}]}",
+    "type": "text"
+   }
+  ],
+  "diagnostics": null,
+  "id": "msg_011CgD4CRkpVyYYYJFWTo6Um",
+  "model": "claude-sonnet-5-5",
+  "role": "assistant",
+  "stop_details": null,
+  "stop_reason": "end_turn",
+  "stop_sequence": null,
+  "type": "message",
+  "usage": {
+   "cache_creation": {
+    "ephemeral_1h_input_tokens": 0,
+    "ephemeral_5m_input_tokens": 0
+   },
+   "cache_creation_input_tokens": 0,
+   "cache_read_input_tokens": 1874,
+   "inference_geo": "global",
+   "input_tokens": 208,
+   "output_tokens": 321,
+   "output_tokens_details": {
+    "thinking_tokens": 0
+   },
+   "service_tier": "batch",
+   "speed": "standard"
+  }
+ },
+ "5fe57421379d9c0b": {
+  "container": null,
+  "content": [
+   {
+    "text": "{\"mentions\":[{\"local_id\":\"m1\",\"surface\":\"Greg Harris\",\"type\":\"Person\",\"context\":\"From: Greg Harris <greg.harris@aiven.io.invalid>\"},{\"local_id\":\"m2\",\"surface\":\"KIP-1032\",\"type\":\"KIP\",\"context\":\"Thread subject: [DISCUSS] KIP-1032: Upgrade to Jakarta and JavaEE 9 in Kafka 4.0\"},{\"local_id\":\"m3\",\"surface\":\"Kafka 4.0\",\"type\":\"Release\",\"context\":\"Thread subject: [DISCUSS] KIP-1032: Upgrade to Jakarta and JavaEE 9 in Kafka 4.0\"}],\"relations\":[{\"type\":\"REVIEWED\",\"source\":\"m1\",\"target\":\"m2\",\"vote_value\":null,\"binding\":null,\"confidence\":0.7},{\"type\":\"AFFECTS\",\"source\":\"m2\",\"target\":\"m3\",\"vote_value\":null,\"binding\":null,\"confidence\":0.6}]}",
+    "type": "text"
+   }
+  ],
+  "diagnostics": null,
+  "id": "msg_011CgD4AtowtLyY3Y9Puu7UD",
+  "model": "claude-sonnet-5-5",
+  "role": "assistant",
+  "stop_details": null,
+  "stop_reason": "end_turn",
+  "stop_sequence": null,
+  "type": "message",
+  "usage": {
+   "cache_creation": {
+    "ephemeral_1h_input_tokens": 0,
+    "ephemeral_5m_input_tokens": 0
+   },
+   "cache_creation_input_tokens": 0,
+   "cache_read_input_tokens": 1874,
+   "inference_geo": "global",
+   "input_tokens": 366,
+   "output_tokens": 333,
+   "output_tokens_details": {
+    "thinking_tokens": 0
+   },
+   "service_tier": "batch",
+   "speed": "standard"
+  }
+ },
+ "6211d0ab58164b85": {
+  "container": null,
+  "content": [
+   {
+    "text": "{\"mentions\":[{\"local_id\":\"m1\",\"surface\":\"David A\",\"type\":\"Person\",\"context\":\"David A\"},{\"local_id\":\"m2\",\"surface\":\"KIP-1043\",\"type\":\"KIP\",\"context\":\"[VOTE] KIP-1043: Administration of groups\"}],\"relations\":[{\"type\":\"VOTED\",\"source\":\"m1\",\"target\":\"m2\",\"vote_value\":1,\"binding\":true,\"confidence\":0.95}]}",
+    "type": "text"
+   }
+  ],
+  "diagnostics": null,
+  "id": "msg_011CgD3iFgZNPuUoEkHYNidT",
+  "model": "claude-sonnet-5-5",
+  "role": "assistant",
+  "stop_details": null,
+  "stop_reason": "end_turn",
+  "stop_sequence": null,
+  "type": "message",
+  "usage": {
+   "cache_creation": {
+    "ephemeral_1h_input_tokens": 0,
+    "ephemeral_5m_input_tokens": 0
+   },
+   "cache_creation_input_tokens": 0,
+   "cache_read_input_tokens": 1874,
+   "inference_geo": "global",
+   "input_tokens": 114,
+   "output_tokens": 143,
+   "output_tokens_details": {
+    "thinking_tokens": 0
+   },
+   "service_tier": "batch",
+   "speed": "standard"
+  }
+ },
+ "65b7db12b3677758": {
+  "container": null,
+  "content": [
+   {
+    "text": "{\"mentions\":[{\"local_id\":\"m1\",\"surface\":\"Greg Harris\",\"type\":\"Person\",\"context\":\"From: Greg Harris <greg.harris@aiven.io.invalid>\"},{\"local_id\":\"m2\",\"surface\":\"Chris\",\"type\":\"Person\",\"context\":\"Hi Chris,\"},{\"local_id\":\"m3\",\"surface\":\"KIP-1032\",\"type\":\"KIP\",\"context\":\"[DISCUSS] KIP-1032: Upgrade to Jakarta and JavaEE 9 in Kafka 4.0\"},{\"local_id\":\"m4\",\"surface\":\"Kafka 4.0\",\"type\":\"Release\",\"context\":\"[DISCUSS] KIP-1032: Upgrade to Jakarta and JavaEE 9 in Kafka 4.0\"}],\"relations\":[{\"type\":\"AFFECTS\",\"source\":\"m3\",\"target\":\"m4\",\"vote_value\":null,\"binding\":null,\"confidence\":0.5}]}",
+    "type": "text"
+   }
+  ],
+  "diagnostics": null,
+  "id": "msg_011CgD3fMdAMSGhuwmds4uoD",
+  "model": "claude-sonnet-5-5",
+  "role": "assistant",
+  "stop_details": null,
+  "stop_reason": "end_turn",
+  "stop_sequence": null,
+  "type": "message",
+  "usage": {
+   "cache_creation": {
+    "ephemeral_1h_input_tokens": 0,
+    "ephemeral_5m_input_tokens": 0
+   },
+   "cache_creation_input_tokens": 0,
+   "cache_read_input_tokens": 1874,
+   "inference_geo": "global",
+   "input_tokens": 185,
+   "output_tokens": 311,
+   "output_tokens_details": {
+    "thinking_tokens": 0
+   },
+   "service_tier": "batch",
+   "speed": "standard"
+  }
+ },
+ "67a890b19af62680": {
+  "container": null,
+  "content": [
+   {
+    "text": "{\"mentions\":[{\"local_id\":\"m1\",\"surface\":\"Mickael\",\"type\":\"Person\",\"context\":\"Mickael\"},{\"local_id\":\"m2\",\"surface\":\"Christopher\",\"type\":\"Person\",\"context\":\"Hi Christopher,\"},{\"local_id\":\"m3\",\"surface\":\"KIP-1032\",\"type\":\"KIP\",\"context\":\"[VOTE]: KIP-1032: Upgrade to Jakarta and JavaEE 10 in Kafka 4.0\"},{\"local_id\":\"m4\",\"surface\":\"Kafka 4.0\",\"type\":\"Release\",\"context\":\"[VOTE]: KIP-1032: Upgrade to Jakarta and JavaEE 10 in Kafka 4.0\"}],\"relations\":[{\"type\":\"VOTED\",\"source\":\"m1\",\"target\":\"m3\",\"vote_value\":1,\"binding\":true,\"confidence\":0.97},{\"type\":\"PROPOSED\",\"source\":\"m2\",\"target\":\"m3\",\"vote_value\":null,\"binding\":null,\"confidence\":0.7},{\"type\":\"AFFECTS\",\"source\":\"m3\",\"target\":\"m4\",\"vote_value\":null,\"binding\":null,\"confidence\":0.6}]}",
+    "type": "text"
+   }
+  ],
+  "diagnostics": null,
+  "id": "msg_011CgD3hcJGHwXaaHJY8HE6t",
+  "model": "claude-sonnet-5-5",
+  "role": "assistant",
+  "stop_details": null,
+  "stop_reason": "end_turn",
+  "stop_sequence": null,
+  "type": "message",
+  "usage": {
+   "cache_creation": {
+    "ephemeral_1h_input_tokens": 0,
+    "ephemeral_5m_input_tokens": 0
+   },
+   "cache_creation_input_tokens": 0,
+   "cache_read_input_tokens": 1874,
+   "inference_geo": "global",
+   "input_tokens": 184,
+   "output_tokens": 378,
+   "output_tokens_details": {
+    "thinking_tokens": 0
+   },
+   "service_tier": "batch",
+   "speed": "standard"
+  }
+ },
+ "6ac475da22447dfb": {
+  "container": null,
+  "content": [
+   {
+    "text": "{\"mentions\":[{\"local_id\":\"m1\",\"surface\":\"Greg\",\"type\":\"Person\",\"context\":\"Thanks,\\nGreg\"},{\"local_id\":\"m2\",\"surface\":\"Chris\",\"type\":\"Person\",\"context\":\"Hi Chris,\"},{\"local_id\":\"m3\",\"surface\":\"KIP-1032\",\"type\":\"KIP\",\"context\":\"Thread subject: [DISCUSS] KIP-1032: Upgrade to Jakarta and JavaEE 9 in Kafka 4.0\"},{\"local_id\":\"m4\",\"surface\":\"ConnectRestExtension\",\"type\":\"Component\",\"context\":\"I think the bigger problem really is the ConnectRestExtension, since we've baked the rs-api type into the signature of ConnectRestExtensionContext.\"},{\"local_id\":\"m5\",\"surface\":\"Kafka 4.0\",\"type\":\"Release\",\"context\":\"Upgrade to Jakarta and JavaEE 9 in Kafka 4.0\"}],\"relations\":[{\"type\":\"REVIEWED\",\"source\":\"m1\",\"target\":\"m3\",\"vote_value\":null,\"binding\":null,\"confidence\":0.8},{\"type\":\"PROPOSED\",\"source\":\"m2\",\"target\":\"m3\",\"vote_value\":null,\"binding\":null,\"confidence\":0.8},{\"type\":\"AFFECTS\",\"source\":\"m3\",\"target\":\"m4\",\"vote_value\":null,\"binding\":null,\"confidence\":0.7},{\"type\":\"AFFECTS\",\"source\":\"m3\",\"target\":\"m5\",\"vote_value\":null,\"binding\":null,\"confidence\":0.5}]}",
+    "type": "text"
+   }
+  ],
+  "diagnostics": null,
+  "id": "msg_011CgD3h3jwMsnf3YkYuwqgQ",
+  "model": "claude-sonnet-5-5",
+  "role": "assistant",
+  "stop_details": null,
+  "stop_reason": "end_turn",
+  "stop_sequence": null,
+  "type": "message",
+  "usage": {
+   "cache_creation": {
+    "ephemeral_1h_input_tokens": 0,
+    "ephemeral_5m_input_tokens": 0
+   },
+   "cache_creation_input_tokens": 0,
+   "cache_read_input_tokens": 1874,
+   "inference_geo": "global",
+   "input_tokens": 925,
+   "output_tokens": 506,
+   "output_tokens_details": {
+    "thinking_tokens": 0
+   },
+   "service_tier": "batch",
+   "speed": "standard"
+  }
+ },
+ "72f35b7d2d5e6143": {
+  "container": null,
+  "content": [
+   {
+    "text": "{\"mentions\":[{\"local_id\":\"m1\",\"surface\":\"Andrew Schofield\",\"type\":\"Person\",\"context\":\"From: Andrew Schofield <andrew_schofield@live.com>\"},{\"local_id\":\"m2\",\"surface\":\"Kirk\",\"type\":\"Person\",\"context\":\"Hi Kirk,\"},{\"local_id\":\"m3\",\"surface\":\"KIP-848\",\"type\":\"KIP\",\"context\":\"Since KIP-848, the set of consumer groups is actually formed from those which use the classic protocol and those which use the modern protocol.\"},{\"local_id\":\"m4\",\"surface\":\"KIP-1043\",\"type\":\"KIP\",\"context\":\"Thread subject: [DISCUSS] KIP-1043: Administration of groups\"}],\"relations\":[{\"type\":\"REVIEWED\",\"source\":\"m2\",\"target\":\"m4\",\"vote_value\":null,\"binding\":null,\"confidence\":0.6},{\"type\":\"PROPOSED\",\"source\":\"m1\",\"target\":\"m4\",\"vote_value\":null,\"binding\":null,\"confidence\":0.7}]}",
+    "type": "text"
+   }
+  ],
+  "diagnostics": null,
+  "id": "msg_011CgD3fF3mssHehaX1pLPjg",
+  "model": "claude-sonnet-5-5",
+  "role": "assistant",
+  "stop_details": null,
+  "stop_reason": "end_turn",
+  "stop_sequence": null,
+  "type": "message",
+  "usage": {
+   "cache_creation": {
+    "ephemeral_1h_input_tokens": 0,
+    "ephemeral_5m_input_tokens": 0
+   },
+   "cache_creation_input_tokens": 0,
+   "cache_read_input_tokens": 1874,
+   "inference_geo": "global",
+   "input_tokens": 779,
+   "output_tokens": 337,
+   "output_tokens_details": {
+    "thinking_tokens": 0
+   },
+   "service_tier": "batch",
+   "speed": "standard"
+  }
+ },
+ "77436d1b80f59748": {
+  "container": null,
+  "content": [
+   {
+    "text": "{\"mentions\":[{\"local_id\":\"m1\",\"surface\":\"Andrew Schofield\",\"type\":\"Person\",\"context\":\"From: Andrew Schofield <andrew_schofield@live.com>\"},{\"local_id\":\"m2\",\"surface\":\"David\",\"type\":\"Person\",\"context\":\"Hi David,\"},{\"local_id\":\"m3\",\"surface\":\"KIP-1043\",\"type\":\"KIP\",\"context\":\"Thread subject: [DISCUSS] KIP-1043: Administration of groups\"},{\"local_id\":\"m4\",\"surface\":\"AK 5.0\",\"type\":\"Release\",\"context\":\"I imagine that classic consumer groups will disappear in AK 5.0, but it will still be possible to have a consumer which just commits offsets\"}],\"relations\":[{\"type\":\"PROPOSED\",\"source\":\"m1\",\"target\":\"m3\",\"vote_value\":null,\"binding\":null,\"confidence\":0.85},{\"type\":\"REVIEWED\",\"source\":\"m2\",\"target\":\"m3\",\"vote_value\":null,\"binding\":null,\"confidence\":0.9},{\"type\":\"AFFECTS\",\"source\":\"m3\",\"target\":\"m4\",\"vote_value\":null,\"binding\":null,\"confidence\":0.3}]}",
+    "type": "text"
+   }
+  ],
+  "diagnostics": null,
+  "id": "msg_011CgD3fLHHxRjPkiAhim4cq",
+  "model": "claude-sonnet-5-5",
+  "role": "assistant",
+  "stop_details": null,
+  "stop_reason": "end_turn",
+  "stop_sequence": null,
+  "type": "message",
+  "usage": {
+   "cache_creation": {
+    "ephemeral_1h_input_tokens": 0,
+    "ephemeral_5m_input_tokens": 0
+   },
+   "cache_creation_input_tokens": 0,
+   "cache_read_input_tokens": 1874,
+   "inference_geo": "global",
+   "input_tokens": 3427,
+   "output_tokens": 380,
+   "output_tokens_details": {
+    "thinking_tokens": 0
+   },
+   "service_tier": "batch",
+   "speed": "standard"
+  }
+ },
+ "828298044c1f3a62": {
+  "container": null,
+  "content": [
+   {
+    "text": "{\"mentions\":[{\"local_id\":\"m1\",\"surface\":\"Andrew Schofield\",\"type\":\"Person\",\"context\":\"From: Andrew Schofield <andrew_schofield_jira@outlook.com>\"},{\"local_id\":\"m2\",\"surface\":\"KIP-1043\",\"type\":\"KIP\",\"context\":\"I would like to start voting for KIP-1043: Administration of groups.\"}],\"relations\":[{\"type\":\"PROPOSED\",\"source\":\"m1\",\"target\":\"m2\",\"vote_value\":null,\"binding\":null,\"confidence\":0.85}]}",
+    "type": "text"
+   }
+  ],
+  "diagnostics": null,
+  "id": "msg_011CgD3ij4LhdmRK7zxvo695",
+  "model": "claude-sonnet-5-5",
+  "role": "assistant",
+  "stop_details": null,
+  "stop_reason": "end_turn",
+  "stop_sequence": null,
+  "type": "message",
+  "usage": {
+   "cache_creation": {
+    "ephemeral_1h_input_tokens": 0,
+    "ephemeral_5m_input_tokens": 0
+   },
+   "cache_creation_input_tokens": 0,
+   "cache_read_input_tokens": 1874,
+   "inference_geo": "global",
+   "input_tokens": 224,
+   "output_tokens": 179,
+   "output_tokens_details": {
+    "thinking_tokens": 0
+   },
+   "service_tier": "batch",
+   "speed": "standard"
+  }
+ },
+ "84309744833af5cc": {
+  "container": null,
+  "content": [
+   {
+    "text": "{\"mentions\":[{\"local_id\":\"m1\",\"surface\":\"Greg\",\"type\":\"Person\",\"context\":\"Thanks!\\nGreg\"},{\"local_id\":\"m2\",\"surface\":\"KIP-1032\",\"type\":\"KIP\",\"context\":\"Thread subject: [VOTE]: KIP-1032: Upgrade to Jakarta and JavaEE 10 in Kafka 4.0\"},{\"local_id\":\"m3\",\"surface\":\"Connect\",\"type\":\"Component\",\"context\":\"Connect and MirrorMaker2 can follow the broker's lead on setting Java 17 as the minimum version.\"},{\"local_id\":\"m4\",\"surface\":\"MirrorMaker2\",\"type\":\"Component\",\"context\":\"Connect and MirrorMaker2 can follow the broker's lead on setting Java 17 as the minimum version.\"}],\"relations\":[{\"type\":\"VOTED\",\"source\":\"m1\",\"target\":\"m2\",\"vote_value\":1,\"binding\":true,\"confidence\":0.97},{\"type\":\"AFFECTS\",\"source\":\"m2\",\"target\":\"m3\",\"vote_value\":null,\"binding\":null,\"confidence\":0.4},{\"type\":\"AFFECTS\",\"source\":\"m2\",\"target\":\"m4\",\"vote_value\":null,\"binding\":null,\"confidence\":0.4}]}",
+    "type": "text"
+   }
+  ],
+  "diagnostics": null,
+  "id": "msg_011CgD3hVi8iBvUJNPSPa63i",
+  "model": "claude-sonnet-5-5",
+  "role": "assistant",
+  "stop_details": null,
+  "stop_reason": "end_turn",
+  "stop_sequence": null,
+  "type": "message",
+  "usage": {
+   "cache_creation": {
+    "ephemeral_1h_input_tokens": 0,
+    "ephemeral_5m_input_tokens": 0
+   },
+   "cache_creation_input_tokens": 0,
+   "cache_read_input_tokens": 1874,
+   "inference_geo": "global",
+   "input_tokens": 264,
+   "output_tokens": 409,
+   "output_tokens_details": {
+    "thinking_tokens": 0
+   },
+   "service_tier": "batch",
+   "speed": "standard"
+  }
+ },
+ "8634bfdb9e2a99db": {
+  "container": null,
+  "content": [
+   {
+    "text": "{\"mentions\":[{\"local_id\":\"m1\",\"surface\":\"Andrew Schofield\",\"type\":\"Person\",\"context\":\"From: Andrew Schofield <andrew_schofield_jira@outlook.com>\"},{\"local_id\":\"m2\",\"surface\":\"Lianet\",\"type\":\"Person\",\"context\":\"Hi Lianet,\"},{\"local_id\":\"m3\",\"surface\":\"KIP-1043\",\"type\":\"KIP\",\"context\":\"Subject: Re: [DISCUSS] KIP-1043: Administration of groups\"},{\"local_id\":\"m4\",\"surface\":\"Lucas\",\"type\":\"Person\",\"context\":\"Also agree with the 2 minor points made by Lucas.\"}],\"relations\":[{\"type\":\"PROPOSED\",\"source\":\"m1\",\"target\":\"m3\",\"vote_value\":null,\"binding\":null,\"confidence\":0.8},{\"type\":\"REVIEWED\",\"source\":\"m2\",\"target\":\"m3\",\"vote_value\":null,\"binding\":null,\"confidence\":0.9},{\"type\":\"REVIEWED\",\"source\":\"m4\",\"target\":\"m3\",\"vote_value\":null,\"binding\":null,\"confidence\":0.6}]}",
+    "type": "text"
+   }
+  ],
+  "diagnostics": null,
+  "id": "msg_011CgD3gaNtxjkq1Ea9yWWQv",
+  "model": "claude-sonnet-5-5",
+  "role": "assistant",
+  "stop_details": null,
+  "stop_reason": "end_turn",
+  "stop_sequence": null,
+  "type": "message",
+  "usage": {
+   "cache_creation": {
+    "ephemeral_1h_input_tokens": 0,
+    "ephemeral_5m_input_tokens": 0
+   },
+   "cache_creation_input_tokens": 0,
+   "cache_read_input_tokens": 1874,
+   "inference_geo": "global",
+   "input_tokens": 416,
+   "output_tokens": 364,
+   "output_tokens_details": {
+    "thinking_tokens": 0
+   },
+   "service_tier": "batch",
+   "speed": "standard"
+  }
+ },
+ "9648a03b2eea9455": {
+  "container": null,
+  "content": [
+   {
+    "text": "{\"mentions\":[{\"local_id\":\"m1\",\"surface\":\"Greg\",\"type\":\"Person\",\"context\":\"Thanks, Greg\"},{\"local_id\":\"m2\",\"surface\":\"Chris\",\"type\":\"Person\",\"context\":\"Hey Chris,\"},{\"local_id\":\"m3\",\"surface\":\"KIP-1032\",\"type\":\"KIP\",\"context\":\"Thread subject: [DISCUSS] KIP-1032: Upgrade to Jakarta and JavaEE 9 in Kafka 4.0\"},{\"local_id\":\"m4\",\"surface\":\"Connect\",\"type\":\"Component\",\"context\":\"I think it's better that this KIP include the bump to Java 17 just for Connect and MirrorMaker 2, and should include that in the KIP title.\"},{\"local_id\":\"m5\",\"surface\":\"MirrorMaker 2\",\"type\":\"Component\",\"context\":\"I think it's better that this KIP include the bump to Java 17 just for Connect and MirrorMaker 2, and should include that in the KIP title.\"},{\"local_id\":\"m6\",\"surface\":\"Kafka 4.0\",\"type\":\"Release\",\"context\":\"Thread subject: [DISCUSS] KIP-1032: Upgrade to Jakarta and JavaEE 9 in Kafka 4.0\"}],\"relations\":[{\"type\":\"REVIEWED\",\"source\":\"m1\",\"target\":\"m3\",\"vote_value\":null,\"binding\":null,\"confidence\":0.8},{\"type\":\"AFFECTS\",\"source\":\"m3\",\"target\":\"m4\",\"vote_value\":null,\"binding\":null,\"confidence\":0.6},{\"type\":\"AFFECTS\",\"source\":\"m3\",\"target\":\"m5\",\"vote_value\":null,\"binding\":null,\"confidence\":0.6},{\"type\":\"AFFECTS\",\"source\":\"m3\",\"target\":\"m6\",\"vote_value\":null,\"binding\":null,\"confidence\":0.5}]}",
+    "type": "text"
+   }
+  ],
+  "diagnostics": null,
+  "id": "msg_011CgD43aQDbr8hu5WYd7AAN",
+  "model": "claude-sonnet-5-5",
+  "role": "assistant",
+  "stop_details": null,
+  "stop_reason": "end_turn",
+  "stop_sequence": null,
+  "type": "message",
+  "usage": {
+   "cache_creation": {
+    "ephemeral_1h_input_tokens": 0,
+    "ephemeral_5m_input_tokens": 0
+   },
+   "cache_creation_input_tokens": 0,
+   "cache_read_input_tokens": 1874,
+   "inference_geo": "global",
+   "input_tokens": 530,
+   "output_tokens": 597,
+   "output_tokens_details": {
+    "thinking_tokens": 0
+   },
+   "service_tier": "batch",
+   "speed": "standard"
+  }
+ },
+ "a6d626b7a15c10e8": {
+  "container": null,
+  "content": [
+   {
+    "text": "{\"mentions\":[{\"local_id\":\"m1\",\"surface\":\"KIP-1032\",\"type\":\"KIP\",\"context\":\"Thread subject: [VOTE]: KIP-1032: Upgrade to Jakarta and JavaEE 10 in Kafka 4.0\"},{\"local_id\":\"m2\",\"surface\":\"Kafka 4.0\",\"type\":\"Release\",\"context\":\"Thread subject: [VOTE]: KIP-1032: Upgrade to Jakarta and JavaEE 10 in Kafka 4.0\"}],\"relations\":[{\"type\":\"AFFECTS\",\"source\":\"m1\",\"target\":\"m2\",\"vote_value\":null,\"binding\":null,\"confidence\":0.5}]}",
+    "type": "text"
+   }
+  ],
+  "diagnostics": null,
+  "id": "msg_011CgD3hEg1Ux5FiWkSxupxh",
+  "model": "claude-sonnet-5-5",
+  "role": "assistant",
+  "stop_details": null,
+  "stop_reason": "end_turn",
+  "stop_sequence": null,
+  "type": "message",
+  "usage": {
+   "cache_creation": {
+    "ephemeral_1h_input_tokens": 0,
+    "ephemeral_5m_input_tokens": 0
+   },
+   "cache_creation_input_tokens": 0,
+   "cache_read_input_tokens": 1874,
+   "inference_geo": "global",
+   "input_tokens": 174,
+   "output_tokens": 228,
+   "output_tokens_details": {
+    "thinking_tokens": 0
+   },
+   "service_tier": "batch",
+   "speed": "standard"
+  }
+ },
+ "a7456702aed5c0ea": {
+  "container": null,
+  "content": [
+   {
+    "text": "{\"mentions\":[{\"local_id\":\"m1\",\"surface\":\"David Jacot\",\"type\":\"Person\",\"context\":\"From: David Jacot <djacot@confluent.io.invalid>\"},{\"local_id\":\"m2\",\"surface\":\"Andrew\",\"type\":\"Person\",\"context\":\"Hi Andrew,\"},{\"local_id\":\"m3\",\"surface\":\"KIP-1043\",\"type\":\"KIP\",\"context\":\"Thread subject: [DISCUSS] KIP-1043: Administration of groups\"}],\"relations\":[{\"type\":\"REVIEWED\",\"source\":\"m1\",\"target\":\"m3\",\"vote_value\":null,\"binding\":null,\"confidence\":0.8}]}",
+    "type": "text"
+   }
+  ],
+  "diagnostics": null,
+  "id": "msg_011CgD3fLG41p2E1wcv7nUBu",
+  "model": "claude-sonnet-5-5",
+  "role": "assistant",
+  "stop_details": null,
+  "stop_reason": "end_turn",
+  "stop_sequence": null,
+  "type": "message",
+  "usage": {
+   "cache_creation": {
+    "ephemeral_1h_input_tokens": 0,
+    "ephemeral_5m_input_tokens": 0
+   },
+   "cache_creation_input_tokens": 0,
+   "cache_read_input_tokens": 1874,
+   "inference_geo": "global",
+   "input_tokens": 702,
+   "output_tokens": 214,
+   "output_tokens_details": {
+    "thinking_tokens": 0
+   },
+   "service_tier": "batch",
+   "speed": "standard"
+  }
+ },
+ "adf235eea34d8d96": {
+  "container": null,
+  "content": [
+   {
+    "text": "{\"mentions\":[{\"local_id\":\"m1\",\"surface\":\"David Jacot\",\"type\":\"Person\",\"context\":\"From: David Jacot <djacot@confluent.io.invalid>\"},{\"local_id\":\"m2\",\"surface\":\"Andrew\",\"type\":\"Person\",\"context\":\"Hi Andrew,\"},{\"local_id\":\"m3\",\"surface\":\"KIP-1043\",\"type\":\"KIP\",\"context\":\"Thread subject: [DISCUSS] KIP-1043: Administration of groups\"},{\"local_id\":\"m4\",\"surface\":\"DescribeGroups API\",\"type\":\"Component\",\"context\":\"It seems that we have no choice but to also change the DescribeGroups API.\"}],\"relations\":[{\"type\":\"REVIEWED\",\"source\":\"m1\",\"target\":\"m3\",\"vote_value\":null,\"binding\":null,\"confidence\":0.8},{\"type\":\"AFFECTS\",\"source\":\"m3\",\"target\":\"m4\",\"vote_value\":null,\"binding\":null,\"confidence\":0.6}]}",
+    "type": "text"
+   }
+  ],
+  "diagnostics": null,
+  "id": "msg_011CgD4BJ7uGwWJeXYUpZRE6",
+  "model": "claude-sonnet-5-5",
+  "role": "assistant",
+  "stop_details": null,
+  "stop_reason": "end_turn",
+  "stop_sequence": null,
+  "type": "message",
+  "usage": {
+   "cache_creation": {
+    "ephemeral_1h_input_tokens": 0,
+    "ephemeral_5m_input_tokens": 0
+   },
+   "cache_creation_input_tokens": 0,
+   "cache_read_input_tokens": 1874,
+   "inference_geo": "global",
+   "input_tokens": 352,
+   "output_tokens": 316,
+   "output_tokens_details": {
+    "thinking_tokens": 0
+   },
+   "service_tier": "batch",
+   "speed": "standard"
+  }
+ },
+ "aecf9cf642e85c86": {
+  "container": null,
+  "content": [
+   {
+    "text": "{\"mentions\":[{\"local_id\":\"m1\",\"surface\":\"Christopher Shannon\",\"type\":\"Person\",\"context\":\"From: Christopher Shannon <christopher.l.shannon@gmail.com>\"},{\"local_id\":\"m2\",\"surface\":\"KIP-1032\",\"type\":\"KIP\",\"context\":\"Re: [DISCUSS] KIP-1032: Upgrade to Jakarta and JavaEE 9 in Kafka 4.0\"},{\"local_id\":\"m3\",\"surface\":\"Chris\",\"type\":\"Person\",\"context\":\"Hi Chris,\"},{\"local_id\":\"m4\",\"surface\":\"Kafka 4.0\",\"type\":\"Release\",\"context\":\"Re: [DISCUSS] KIP-1032: Upgrade to Jakarta and JavaEE 9 in Kafka 4.0\"}],\"relations\":[{\"type\":\"AFFECTS\",\"source\":\"m2\",\"target\":\"m4\",\"vote_value\":null,\"binding\":null,\"confidence\":0.6},{\"type\":\"REVIEWED\",\"source\":\"m1\",\"target\":\"m2\",\"vote_value\":null,\"binding\":null,\"confidence\":0.5}]}",
+    "type": "text"
+   }
+  ],
+  "diagnostics": null,
+  "id": "msg_011CgD4JGsSrDFjmtxcSJGN1",
+  "model": "claude-sonnet-5-5",
+  "role": "assistant",
+  "stop_details": null,
+  "stop_reason": "end_turn",
+  "stop_sequence": null,
+  "type": "message",
+  "usage": {
+   "cache_creation": {
+    "ephemeral_1h_input_tokens": 0,
+    "ephemeral_5m_input_tokens": 0
+   },
+   "cache_creation_input_tokens": 0,
+   "cache_read_input_tokens": 1874,
+   "inference_geo": "global",
+   "input_tokens": 240,
+   "output_tokens": 367,
+   "output_tokens_details": {
+    "thinking_tokens": 0
+   },
+   "service_tier": "batch",
+   "speed": "standard"
+  }
+ },
+ "aee3f5c1f49a24c6": {
+  "container": null,
+  "content": [
+   {
+    "text": "{\"mentions\":[{\"local_id\":\"m1\",\"surface\":\"Christopher Shannon\",\"type\":\"Person\",\"context\":\"From: Christopher Shannon <christopher.l.shannon@gmail.com>\"},{\"local_id\":\"m2\",\"surface\":\"KIP-1032\",\"type\":\"KIP\",\"context\":\"[DISCUSS] KIP-1032: Upgrade to Jakarta and JavaEE 9 in Kafka 4.0\"},{\"local_id\":\"m3\",\"surface\":\"Kafka 4.0\",\"type\":\"Release\",\"context\":\"I'm proposing a KIP for Kafka 4.0 to upgrade to to Jakarta and JavaEE 9 APIs.\"},{\"local_id\":\"m4\",\"surface\":\"Jetty\",\"type\":\"Component\",\"context\":\"This will also upgrade dependencies like Jetty and move away from the depcrated javax namespace to be in line with other libraries and frameworks.\"}],\"relations\":[{\"type\":\"PROPOSED\",\"source\":\"m1\",\"target\":\"m2\",\"vote_value\":null,\"binding\":null,\"confidence\":0.95},{\"type\":\"AFFECTS\",\"source\":\"m2\",\"target\":\"m3\",\"vote_value\":null,\"binding\":null,\"confidence\":0.7},{\"type\":\"AFFECTS\",\"source\":\"m2\",\"target\":\"m4\",\"vote_value\":null,\"binding\":null,\"confidence\":0.8}]}",
+    "type": "text"
+   }
+  ],
+  "diagnostics": null,
+  "id": "msg_011CgD3fP6DVitFcA2FrsTGg",
+  "model": "claude-sonnet-5-5",
+  "role": "assistant",
+  "stop_details": null,
+  "stop_reason": "end_turn",
+  "stop_sequence": null,
+  "type": "message",
+  "usage": {
+   "cache_creation": {
+    "ephemeral_1h_input_tokens": 0,
+    "ephemeral_5m_input_tokens": 0
+   },
+   "cache_creation_input_tokens": 0,
+   "cache_read_input_tokens": 1874,
+   "inference_geo": "global",
+   "input_tokens": 407,
+   "output_tokens": 445,
+   "output_tokens_details": {
+    "thinking_tokens": 0
+   },
+   "service_tier": "batch",
+   "speed": "standard"
+  }
+ },
+ "b71209b858751344": {
+  "container": null,
+  "content": [
+   {
+    "text": "{\"mentions\":[{\"local_id\":\"m1\",\"surface\":\"Chris Egerton\",\"type\":\"Person\",\"context\":\"From: Chris Egerton <chrise@aiven.io.invalid>\"},{\"local_id\":\"m2\",\"surface\":\"KIP-1032\",\"type\":\"KIP\",\"context\":\"Thread subject: [DISCUSS] KIP-1032: Upgrade to Jakarta and JavaEE 9 in Kafka 4.0\"},{\"local_id\":\"m3\",\"surface\":\"KIP-1013\",\"type\":\"KIP\",\"context\":\"It'd be nice to link to KIP-1013 in the motivation section to establish that there is already some precedent for bumping to JDK 17+ for server-side components\"},{\"local_id\":\"m4\",\"surface\":\"Connect\",\"type\":\"Component\",\"context\":\"require users running Connect to upgrade to JDK 17\"},{\"local_id\":\"m5\",\"surface\":\"4.0\",\"type\":\"Release\",\"context\":\"server-side components (i.e., Kafka brokers) in 4.0.\"}],\"relations\":[{\"type\":\"REVIEWED\",\"source\":\"m1\",\"target\":\"m2\",\"vote_value\":null,\"binding\":null,\"confidence\":0.9},{\"type\":\"AFFECTS\",\"source\":\"m2\",\"target\":\"m4\",\"vote_value\":null,\"binding\":null,\"confidence\":0.8},{\"type\":\"AFFECTS\",\"source\":\"m3\",\"target\":\"m5\",\"vote_value\":null,\"binding\":null,\"confidence\":0.4}]}",
+    "type": "text"
+   }
+  ],
+  "diagnostics": null,
+  "id": "msg_011CgD3fqcQUgdvxX6tTJYV2",
+  "model": "claude-sonnet-5-5",
+  "role": "assistant",
+  "stop_details": null,
+  "stop_reason": "end_turn",
+  "stop_sequence": null,
+  "type": "message",
+  "usage": {
+   "cache_creation": {
+    "ephemeral_1h_input_tokens": 0,
+    "ephemeral_5m_input_tokens": 0
+   },
+   "cache_creation_input_tokens": 0,
+   "cache_read_input_tokens": 1874,
+   "inference_geo": "global",
+   "input_tokens": 440,
+   "output_tokens": 475,
+   "output_tokens_details": {
+    "thinking_tokens": 0
+   },
+   "service_tier": "batch",
+   "speed": "standard"
+  }
+ },
+ "bb1bf5908175eeb7": {
+  "container": null,
+  "content": [
+   {
+    "text": "{\"mentions\":[{\"local_id\":\"m1\",\"surface\":\"Chris Egerton\",\"type\":\"Person\",\"context\":\"From: Chris Egerton\"},{\"local_id\":\"m2\",\"surface\":\"KIP-1032\",\"type\":\"KIP\",\"context\":\"Thread subject: [DISCUSS] KIP-1032: Upgrade to Jakarta and JavaEE 9 in Kafka 4.0\"},{\"local_id\":\"m3\",\"surface\":\"Greg\",\"type\":\"Person\",\"context\":\"like Greg has mentioned previously, there is the REST extension API\"},{\"local_id\":\"m4\",\"surface\":\"ConnectRestExtensionContext\",\"type\":\"Component\",\"context\":\"see the ConnectRestExtensionContext interface [1] in the connect-api module.\"},{\"local_id\":\"m5\",\"surface\":\"Kafka 4.0\",\"type\":\"Release\",\"context\":\"Upgrade to Jakarta and JavaEE 9 in Kafka 4.0\"}],\"relations\":[{\"type\":\"REVIEWED\",\"source\":\"m1\",\"target\":\"m2\",\"vote_value\":null,\"binding\":null,\"confidence\":0.8},{\"type\":\"AFFECTS\",\"source\":\"m2\",\"target\":\"m4\",\"vote_value\":null,\"binding\":null,\"confidence\":0.7},{\"type\":\"AFFECTS\",\"source\":\"m2\",\"target\":\"m5\",\"vote_value\":null,\"binding\":null,\"confidence\":0.5}]}",
+    "type": "text"
+   }
+  ],
+  "diagnostics": null,
+  "id": "msg_011CgD3fhDssFUYLaPEKtqec",
+  "model": "claude-sonnet-5-5",
+  "role": "assistant",
+  "stop_details": null,
+  "stop_reason": "end_turn",
+  "stop_sequence": null,
+  "type": "message",
+  "usage": {
+   "cache_creation": {
+    "ephemeral_1h_input_tokens": 0,
+    "ephemeral_5m_input_tokens": 0
+   },
+   "cache_creation_input_tokens": 0,
+   "cache_read_input_tokens": 1874,
+   "inference_geo": "global",
+   "input_tokens": 529,
+   "output_tokens": 456,
+   "output_tokens_details": {
+    "thinking_tokens": 0
+   },
+   "service_tier": "batch",
+   "speed": "standard"
+  }
+ },
+ "bd0f1ebe0d6bd63f": {
+  "container": null,
+  "content": [
+   {
+    "text": "{\"mentions\":[{\"local_id\":\"m1\",\"surface\":\"Andrew Schofield\",\"type\":\"Person\",\"context\":\"From: Andrew Schofield <andrew_schofield_jira@outlook.com>\"},{\"local_id\":\"m2\",\"surface\":\"Chia-Ping\",\"type\":\"Person\",\"context\":\"Hi Chia-Ping,\"},{\"local_id\":\"m3\",\"surface\":\"KIP-1043\",\"type\":\"KIP\",\"context\":\"I prefer to write a new KIP at this point, since KIP-1043 will be complete when the last PR currently under review merges.\"},{\"local_id\":\"m4\",\"surface\":\"KIP-1152\",\"type\":\"KIP\",\"context\":\"Sorry for making noise on this accepted KIP, but inspired by KIP-1152, have you considered adding support for pattern filters?\"}],\"relations\":[{\"type\":\"PROPOSED\",\"source\":\"m1\",\"target\":\"m3\",\"vote_value\":null,\"binding\":null,\"confidence\":0.6}]}",
+    "type": "text"
+   }
+  ],
+  "diagnostics": null,
+  "id": "msg_011CgD3m8pPpt7fsmGYWzuHt",
+  "model": "claude-sonnet-5-5",
+  "role": "assistant",
+  "stop_details": null,
+  "stop_reason": "end_turn",
+  "stop_sequence": null,
+  "type": "message",
+  "usage": {
+   "cache_creation": {
+    "ephemeral_1h_input_tokens": 0,
+    "ephemeral_5m_input_tokens": 0
+   },
+   "cache_creation_input_tokens": 0,
+   "cache_read_input_tokens": 1874,
+   "inference_geo": "global",
+   "input_tokens": 445,
+   "output_tokens": 316,
+   "output_tokens_details": {
+    "thinking_tokens": 0
+   },
+   "service_tier": "batch",
+   "speed": "standard"
+  }
+ },
+ "becd0adee054a281": {
+  "container": null,
+  "content": [
+   {
+    "text": "{\"mentions\":[{\"local_id\":\"m1\",\"surface\":\"Christopher Shannon\",\"type\":\"Person\",\"context\":\"From: Christopher Shannon <christopher.l.shannon@gmail.com>\"},{\"local_id\":\"m2\",\"surface\":\"KIP-1032\",\"type\":\"KIP\",\"context\":\"I'd like to call a vote on https://cwiki.apache.org/confluence/display/KAFKA/KIP-1032%3A+Upgrade+to+Jakarta+and+JavaEE+10+in+Kafka+4.0\"},{\"local_id\":\"m3\",\"surface\":\"Connect\",\"type\":\"Component\",\"context\":\"It also bumps the required version of Connect to JDK 17+ which is in line with the broker for version 4.0\"},{\"local_id\":\"m4\",\"surface\":\"Kafka 4.0\",\"type\":\"Release\",\"context\":\"[VOTE]: KIP-1032: Upgrade to Jakarta and JavaEE 10 in Kafka 4.0\"}],\"relations\":[{\"type\":\"PROPOSED\",\"source\":\"m1\",\"target\":\"m2\",\"vote_value\":null,\"binding\":null,\"confidence\":0.9},{\"type\":\"AFFECTS\",\"source\":\"m2\",\"target\":\"m3\",\"vote_value\":null,\"binding\":null,\"confidence\":0.8},{\"type\":\"AFFECTS\",\"source\":\"m2\",\"target\":\"m4\",\"vote_value\":null,\"binding\":null,\"confidence\":0.6}]}",
+    "type": "text"
+   }
+  ],
+  "diagnostics": null,
+  "id": "msg_011CgD3h1voDWpjTmdpe3q1w",
+  "model": "claude-sonnet-5-5",
+  "role": "assistant",
+  "stop_details": null,
+  "stop_reason": "end_turn",
+  "stop_sequence": null,
+  "type": "message",
+  "usage": {
+   "cache_creation": {
+    "ephemeral_1h_input_tokens": 0,
+    "ephemeral_5m_input_tokens": 0
+   },
+   "cache_creation_input_tokens": 0,
+   "cache_read_input_tokens": 1874,
+   "inference_geo": "global",
+   "input_tokens": 331,
+   "output_tokens": 467,
+   "output_tokens_details": {
+    "thinking_tokens": 0
+   },
+   "service_tier": "batch",
+   "speed": "standard"
+  }
+ },
+ "c23d79493251dbdd": {
+  "container": null,
+  "content": [
+   {
+    "text": "{\"mentions\":[{\"local_id\":\"m1\",\"surface\":\"Chris Egerton\",\"type\":\"Person\",\"context\":\"From: Chris Egerton <chrise@aiven.io.invalid>\"},{\"local_id\":\"m2\",\"surface\":\"KIP-1032\",\"type\":\"KIP\",\"context\":\"Subject: Re: [VOTE]: KIP-1032: Upgrade to Jakarta and JavaEE 10 in Kafka 4.0\"}],\"relations\":[{\"type\":\"VOTED\",\"source\":\"m1\",\"target\":\"m2\",\"vote_value\":1,\"binding\":true,\"confidence\":0.97}]}",
+    "type": "text"
+   }
+  ],
+  "diagnostics": null,
+  "id": "msg_011CgD3fSRdnQvASodfCQSWq",
+  "model": "claude-sonnet-5-5",
+  "role": "assistant",
+  "stop_details": null,
+  "stop_reason": "end_turn",
+  "stop_sequence": null,
+  "type": "message",
+  "usage": {
+   "cache_creation": {
+    "ephemeral_1h_input_tokens": 0,
+    "ephemeral_5m_input_tokens": 0
+   },
+   "cache_creation_input_tokens": 0,
+   "cache_read_input_tokens": 1874,
+   "inference_geo": "global",
+   "input_tokens": 169,
+   "output_tokens": 201,
+   "output_tokens_details": {
+    "thinking_tokens": 0
+   },
+   "service_tier": "batch",
+   "speed": "standard"
+  }
+ },
+ "c7ca682f1cef312c": {
+  "container": null,
+  "content": [
+   {
+    "text": "{\"mentions\":[{\"local_id\":\"m1\",\"surface\":\"Chia-Ping Tsai\",\"type\":\"Person\",\"context\":\"From: Chia-Ping Tsai <chia7712@apache.org>\"},{\"local_id\":\"m2\",\"surface\":\"Andrew\",\"type\":\"Person\",\"context\":\"hi Andrew\"},{\"local_id\":\"m3\",\"surface\":\"KIP-1152\",\"type\":\"KIP\",\"context\":\"Sorry for making noise on this accepted KIP, but inspired by KIP-1152, have you considered adding support for pattern filters?\"},{\"local_id\":\"m4\",\"surface\":\"KIP-1043\",\"type\":\"KIP\",\"context\":\"Thread subject: [DISCUSS] KIP-1043: Administration of groups\"}],\"relations\":[{\"type\":\"REVIEWED\",\"source\":\"m1\",\"target\":\"m4\",\"vote_value\":null,\"binding\":null,\"confidence\":0.7}]}",
+    "type": "text"
+   }
+  ],
+  "diagnostics": null,
+  "id": "msg_011CgD3sz1koXz6cY7hj6Z6E",
+  "model": "claude-sonnet-5-5",
+  "role": "assistant",
+  "stop_details": null,
+  "stop_reason": "end_turn",
+  "stop_sequence": null,
+  "type": "message",
+  "usage": {
+   "cache_creation": {
+    "ephemeral_1h_input_tokens": 0,
+    "ephemeral_5m_input_tokens": 0
+   },
+   "cache_creation_input_tokens": 0,
+   "cache_read_input_tokens": 1874,
+   "inference_geo": "global",
+   "input_tokens": 201,
+   "output_tokens": 296,
+   "output_tokens_details": {
+    "thinking_tokens": 0
+   },
+   "service_tier": "batch",
+   "speed": "standard"
+  }
+ },
+ "d11d11fcd3e65b9d": {
+  "container": null,
+  "content": [
+   {
+    "text": "{\"mentions\":[{\"local_id\":\"m1\",\"surface\":\"KIP\",\"type\":\"KIP\",\"context\":\"The KIP has been updated to include the changes to the ConnectRestExtensionContext.\"},{\"local_id\":\"m2\",\"surface\":\"ConnectRestExtensionContext\",\"type\":\"Component\",\"context\":\"The KIP has been updated to include the changes to the ConnectRestExtensionContext.\"},{\"local_id\":\"m3\",\"surface\":\"Christopher Shannon\",\"type\":\"Person\",\"context\":\"From: Christopher Shannon\"}],\"relations\":[{\"type\":\"AFFECTS\",\"source\":\"m1\",\"target\":\"m2\",\"vote_value\":null,\"binding\":null,\"confidence\":0.7}]}",
+    "type": "text"
+   }
+  ],
+  "diagnostics": null,
+  "id": "msg_011CgD3gPDw5cLCVCicu389p",
+  "model": "claude-sonnet-5-5",
+  "role": "assistant",
+  "stop_details": null,
+  "stop_reason": "end_turn",
+  "stop_sequence": null,
+  "type": "message",
+  "usage": {
+   "cache_creation": {
+    "ephemeral_1h_input_tokens": 0,
+    "ephemeral_5m_input_tokens": 0
+   },
+   "cache_creation_input_tokens": 0,
+   "cache_read_input_tokens": 1874,
+   "inference_geo": "global",
+   "input_tokens": 187,
+   "output_tokens": 229,
+   "output_tokens_details": {
+    "thinking_tokens": 0
+   },
+   "service_tier": "batch",
+   "speed": "standard"
+  }
+ },
+ "deeaa4d3257b3e71": {
+  "container": null,
+  "content": [
+   {
+    "text": "{\"mentions\":[{\"local_id\":\"m1\",\"surface\":\"Andrew\",\"type\":\"Person\",\"context\":\"Andrew\"},{\"local_id\":\"m2\",\"surface\":\"David\",\"type\":\"Person\",\"context\":\"Hi David,\"},{\"local_id\":\"m3\",\"surface\":\"KIP-1043\",\"type\":\"KIP\",\"context\":\"Re: [DISCUSS] KIP-1043: Administration of groups\"}],\"relations\":[{\"type\":\"REVIEWED\",\"source\":\"m2\",\"target\":\"m3\",\"vote_value\":null,\"binding\":null,\"confidence\":0.8}]}",
+    "type": "text"
+   }
+  ],
+  "diagnostics": null,
+  "id": "msg_011CgD3fGnTBpPQX3dVBErai",
+  "model": "claude-sonnet-5-5",
+  "role": "assistant",
+  "stop_details": null,
+  "stop_reason": "end_turn",
+  "stop_sequence": null,
+  "type": "message",
+  "usage": {
+   "cache_creation": {
+    "ephemeral_1h_input_tokens": 0,
+    "ephemeral_5m_input_tokens": 0
+   },
+   "cache_creation_input_tokens": 0,
+   "cache_read_input_tokens": 1874,
+   "inference_geo": "global",
+   "input_tokens": 547,
+   "output_tokens": 186,
+   "output_tokens_details": {
+    "thinking_tokens": 0
+   },
+   "service_tier": "batch",
+   "speed": "standard"
+  }
+ },
+ "e4b9120faae190ef": {
+  "container": null,
+  "content": [
+   {
+    "text": "{\"mentions\":[{\"local_id\":\"m1\",\"surface\":\"Christopher Shannon\",\"type\":\"Person\",\"context\":\"From: Christopher Shannon <christopher.l.shannon@gmail.com>\"},{\"local_id\":\"m2\",\"surface\":\"Greg\",\"type\":\"Person\",\"context\":\"Hi Greg,\"},{\"local_id\":\"m3\",\"surface\":\"KIP-1032\",\"type\":\"KIP\",\"context\":\"Thread subject: [DISCUSS] KIP-1032: Upgrade to Jakarta and JavaEE 9 in Kafka 4.0\"},{\"local_id\":\"m4\",\"surface\":\"KIP-1013\",\"type\":\"KIP\",\"context\":\"should we modify and make that part of KIP-1013 or keep it in this one?\"},{\"local_id\":\"m5\",\"surface\":\"Connect\",\"type\":\"Component\",\"context\":\"If we go with JDK 17 as a requirement for the Connect framework\"},{\"local_id\":\"m6\",\"surface\":\"Kafka 4.0\",\"type\":\"Release\",\"context\":\"Upgrade to Jakarta and JavaEE 9 in Kafka 4.0\"}],\"relations\":[{\"type\":\"AFFECTS\",\"source\":\"m3\",\"target\":\"m5\",\"vote_value\":null,\"binding\":null,\"confidence\":0.6},{\"type\":\"AFFECTS\",\"source\":\"m3\",\"target\":\"m6\",\"vote_value\":null,\"binding\":null,\"confidence\":0.6},{\"type\":\"REVIEWED\",\"source\":\"m1\",\"target\":\"m3\",\"vote_value\":null,\"binding\":null,\"confidence\":0.6}]}",
+    "type": "text"
+   }
+  ],
+  "diagnostics": null,
+  "id": "msg_011CgD4B7N17bXDDEsnt8bk8",
+  "model": "claude-sonnet-5-5",
+  "role": "assistant",
+  "stop_details": null,
+  "stop_reason": "end_turn",
+  "stop_sequence": null,
+  "type": "message",
+  "usage": {
+   "cache_creation": {
+    "ephemeral_1h_input_tokens": 0,
+    "ephemeral_5m_input_tokens": 0
+   },
+   "cache_creation_input_tokens": 0,
+   "cache_read_input_tokens": 1874,
+   "inference_geo": "global",
+   "input_tokens": 550,
+   "output_tokens": 506,
+   "output_tokens_details": {
+    "thinking_tokens": 0
+   },
+   "service_tier": "batch",
+   "speed": "standard"
+  }
+ },
+ "e50eadcb351263df": {
+  "container": null,
+  "content": [
+   {
+    "text": "{\"mentions\":[{\"local_id\":\"m1\",\"surface\":\"Andrew Schofield\",\"type\":\"Person\",\"context\":\"From: Andrew Schofield <andrew_schofield@live.com>\"},{\"local_id\":\"m2\",\"surface\":\"Lianet\",\"type\":\"Person\",\"context\":\"Hi Lianet,\"},{\"local_id\":\"m3\",\"surface\":\"KIP-1043\",\"type\":\"KIP\",\"context\":\"Thread subject: [DISCUSS] KIP-1043: Administration of groups\"}],\"relations\":[{\"type\":\"PROPOSED\",\"source\":\"m1\",\"target\":\"m3\",\"vote_value\":null,\"binding\":null,\"confidence\":0.6},{\"type\":\"REVIEWED\",\"source\":\"m2\",\"target\":\"m3\",\"vote_value\":null,\"binding\":null,\"confidence\":0.7}]}",
+    "type": "text"
+   }
+  ],
+  "diagnostics": null,
+  "id": "msg_011CgD4B7gbjjVSggdBXjwVz",
+  "model": "claude-sonnet-5-5",
+  "role": "assistant",
+  "stop_details": null,
+  "stop_reason": "end_turn",
+  "stop_sequence": null,
+  "type": "message",
+  "usage": {
+   "cache_creation": {
+    "ephemeral_1h_input_tokens": 0,
+    "ephemeral_5m_input_tokens": 0
+   },
+   "cache_creation_input_tokens": 0,
+   "cache_read_input_tokens": 1874,
+   "inference_geo": "global",
+   "input_tokens": 819,
+   "output_tokens": 264,
+   "output_tokens_details": {
+    "thinking_tokens": 0
+   },
+   "service_tier": "batch",
+   "speed": "standard"
+  }
+ },
+ "e85397c467efa9b6": {
+  "container": null,
+  "content": [
+   {
+    "text": "{\"mentions\":[{\"local_id\":\"m1\",\"surface\":\"Lucas Brutschy\",\"type\":\"Person\",\"context\":\"From: Lucas Brutschy <lbrutschy@confluent.io.invalid>\"},{\"local_id\":\"m2\",\"surface\":\"Andrew\",\"type\":\"Person\",\"context\":\"Hi Andrew,\"},{\"local_id\":\"m3\",\"surface\":\"KIP-1043\",\"type\":\"KIP\",\"context\":\"Thread subject: [VOTE] KIP-1043: Administration of groups\"}],\"relations\":[{\"type\":\"VOTED\",\"source\":\"m1\",\"target\":\"m3\",\"vote_value\":1,\"binding\":true,\"confidence\":0.97},{\"type\":\"PROPOSED\",\"source\":\"m2\",\"target\":\"m3\",\"vote_value\":null,\"binding\":null,\"confidence\":0.8}]}",
+    "type": "text"
+   }
+  ],
+  "diagnostics": null,
+  "id": "msg_011CgD3mJ234myAwbusQWyNW",
+  "model": "claude-sonnet-5-5",
+  "role": "assistant",
+  "stop_details": null,
+  "stop_reason": "end_turn",
+  "stop_sequence": null,
+  "type": "message",
+  "usage": {
+   "cache_creation": {
+    "ephemeral_1h_input_tokens": 0,
+    "ephemeral_5m_input_tokens": 0
+   },
+   "cache_creation_input_tokens": 0,
+   "cache_read_input_tokens": 1874,
+   "inference_geo": "global",
+   "input_tokens": 147,
+   "output_tokens": 267,
+   "output_tokens_details": {
+    "thinking_tokens": 0
+   },
+   "service_tier": "batch",
+   "speed": "standard"
+  }
+ },
+ "ed758065cdf05c10": {
+  "container": null,
+  "content": [
+   {
+    "text": "{\"mentions\":[{\"local_id\":\"m1\",\"surface\":\"Andrew Schofield\",\"type\":\"Person\",\"context\":\"From: Andrew Schofield <andrew_schofield@live.com>\"},{\"local_id\":\"m2\",\"surface\":\"Lianet\",\"type\":\"Person\",\"context\":\"Hi Lianet,\"},{\"local_id\":\"m3\",\"surface\":\"KIP-848\",\"type\":\"KIP\",\"context\":\"It’s a bit fiddly because of the introduction of the modern consumer groups by KIP-848 and the need for the admin client to cope with both kinds of consumer groups and older brokers.\"},{\"local_id\":\"m4\",\"surface\":\"KIP-1043\",\"type\":\"KIP\",\"context\":\"Thread subject: [DISCUSS] KIP-1043: Administration of groups\"}],\"relations\":[{\"type\":\"REVIEWED\",\"source\":\"m1\",\"target\":\"m4\",\"vote_value\":null,\"binding\":null,\"confidence\":0.6},{\"type\":\"REVIEWED\",\"source\":\"m2\",\"target\":\"m4\",\"vote_value\":null,\"binding\":null,\"confidence\":0.4}]}",
+    "type": "text"
+   }
+  ],
+  "diagnostics": null,
+  "id": "msg_011CgD4EySN7bDt1TS4b6wXy",
+  "model": "claude-sonnet-5-5",
+  "role": "assistant",
+  "stop_details": null,
+  "stop_reason": "end_turn",
+  "stop_sequence": null,
+  "type": "message",
+  "usage": {
+   "cache_creation": {
+    "ephemeral_1h_input_tokens": 0,
+    "ephemeral_5m_input_tokens": 0
+   },
+   "cache_creation_input_tokens": 0,
+   "cache_read_input_tokens": 1874,
+   "inference_geo": "global",
+   "input_tokens": 752,
+   "output_tokens": 355,
+   "output_tokens_details": {
+    "thinking_tokens": 0
+   },
+   "service_tier": "batch",
+   "speed": "standard"
+  }
+ },
+ "fa2ab057209a27df": {
+  "container": null,
+  "content": [
+   {
+    "text": "{\"mentions\":[{\"local_id\":\"m1\",\"surface\":\"Christopher Shannon\",\"type\":\"Person\",\"context\":\"From: Christopher Shannon <christopher.l.shannon@gmail.com>\"},{\"local_id\":\"m2\",\"surface\":\"KIP-1032\",\"type\":\"KIP\",\"context\":\"It's for KIP-1032 and upgrades to Jakarta, JavaEE 10 and Jetty 12.\"},{\"local_id\":\"m3\",\"surface\":\"Kafka 3.9.0\",\"type\":\"Release\",\"context\":\"With Kafka 3.9.0 being voted on, Kafka 4.0 should not be too much longer so it would be good to get this merged in.\"},{\"local_id\":\"m4\",\"surface\":\"Kafka 4.0\",\"type\":\"Release\",\"context\":\"With Kafka 3.9.0 being voted on, Kafka 4.0 should not be too much longer so it would be good to get this merged in.\"}],\"relations\":[{\"type\":\"PROPOSED\",\"source\":\"m1\",\"target\":\"m2\",\"vote_value\":null,\"binding\":null,\"confidence\":0.6},{\"type\":\"AFFECTS\",\"source\":\"m2\",\"target\":\"m4\",\"vote_value\":null,\"binding\":null,\"confidence\":0.4}]}",
+    "type": "text"
+   }
+  ],
+  "diagnostics": null,
+  "id": "msg_011CgD3iJFbRa2GqMJo3hxYK",
+  "model": "claude-sonnet-5-5",
+  "role": "assistant",
+  "stop_details": null,
+  "stop_reason": "end_turn",
+  "stop_sequence": null,
+  "type": "message",
+  "usage": {
+   "cache_creation": {
+    "ephemeral_1h_input_tokens": 0,
+    "ephemeral_5m_input_tokens": 0
+   },
+   "cache_creation_input_tokens": 0,
+   "cache_read_input_tokens": 1874,
+   "inference_geo": "global",
+   "input_tokens": 217,
+   "output_tokens": 398,
+   "output_tokens_details": {
+    "thinking_tokens": 0
+   },
+   "service_tier": "batch",
+   "speed": "standard"
+  }
+ },
+ "fc9d3babefa97270": {
+  "container": null,
+  "content": [
+   {
+    "text": "{\"mentions\":[{\"local_id\":\"m1\",\"surface\":\"Andrew Schofield\",\"type\":\"Person\",\"context\":\"From: Andrew Schofield <andrew_schofield@live.com>\"},{\"local_id\":\"m2\",\"surface\":\"Apoorv\",\"type\":\"Person\",\"context\":\"Hi Apoorv,\"},{\"local_id\":\"m3\",\"surface\":\"KIP-1043\",\"type\":\"KIP\",\"context\":\"Thread subject: [DISCUSS] KIP-1043: Administration of groups\"},{\"local_id\":\"m4\",\"surface\":\"AK 4.0\",\"type\":\"Release\",\"context\":\"In AK 4.0, the default group protocol will change and setting the property will not be necessary.\"},{\"local_id\":\"m5\",\"surface\":\"AsyncKafkaConsumer\",\"type\":\"Component\",\"context\":\"This tells a factory method in the consumer to use the AsyncKafkaConsumer (group type is Consumer, protocol is \\\"consumer\\\") as opposed to the LegacyKafkaConsumer\"},{\"local_id\":\"m6\",\"surface\":\"LegacyKafkaConsumer\",\"type\":\"Component\",\"context\":\"as opposed to the LegacyKafkaConsumer (group type is Classic, protocol is \\\"consumer\\\").\"}],\"relations\":[{\"type\":\"REVIEWED\",\"source\":\"m1\",\"target\":\"m3\",\"vote_value\":null,\"binding\":null,\"confidence\":0.5}]}",
+    "type": "text"
+   }
+  ],
+  "diagnostics": null,
+  "id": "msg_011CgD3fD1z3k8pnhszep4mb",
+  "model": "claude-sonnet-5-5",
+  "role": "assistant",
+  "stop_details": null,
+  "stop_reason": "end_turn",
+  "stop_sequence": null,
+  "type": "message",
+  "usage": {
+   "cache_creation": {
+    "ephemeral_1h_input_tokens": 0,
+    "ephemeral_5m_input_tokens": 0
+   },
+   "cache_creation_input_tokens": 0,
+   "cache_read_input_tokens": 1874,
+   "inference_geo": "global",
+   "input_tokens": 882,
+   "output_tokens": 457,
+   "output_tokens_details": {
+    "thinking_tokens": 0
+   },
+   "service_tier": "batch",
+   "speed": "standard"
+  }
+ },
+ "fe26b112c6f4e8d3": {
+  "container": null,
+  "content": [
+   {
+    "text": "{\"mentions\":[{\"local_id\":\"m1\",\"surface\":\"Andrew Schofield\",\"type\":\"Person\",\"context\":\"From: Andrew Schofield <andrew_schofield_jira@outlook.com>\"},{\"local_id\":\"m2\",\"surface\":\"David\",\"type\":\"Person\",\"context\":\"Hi David,\"},{\"local_id\":\"m3\",\"surface\":\"KIP-1043\",\"type\":\"KIP\",\"context\":\"Thread subject: [DISCUSS] KIP-1043: Administration of groups\"},{\"local_id\":\"m4\",\"surface\":\"KIP-932\",\"type\":\"KIP\",\"context\":\"I will deprecate Admin#listConsumerGroups in this KIP, and remove Admin#listShareGroups from KIP-932, along with related tidying up that results from this.\"}],\"relations\":[{\"type\":\"PROPOSED\",\"source\":\"m1\",\"target\":\"m3\",\"vote_value\":null,\"binding\":null,\"confidence\":0.8},{\"type\":\"REVIEWED\",\"source\":\"m2\",\"target\":\"m3\",\"vote_value\":null,\"binding\":null,\"confidence\":0.8},{\"type\":\"REVIEWED\",\"source\":\"m1\",\"target\":\"m3\",\"vote_value\":null,\"binding\":null,\"confidence\":0.5}]}",
+    "type": "text"
+   }
+  ],
+  "diagnostics": null,
+  "id": "msg_011CgD55QpS4fSBxfqQSXpSC",
+  "model": "claude-sonnet-5-5",
+  "role": "assistant",
+  "stop_details": null,
+  "stop_reason": "end_turn",
+  "stop_sequence": null,
+  "type": "message",
+  "usage": {
+   "cache_creation": {
+    "ephemeral_1h_input_tokens": 0,
+    "ephemeral_5m_input_tokens": 0
+   },
+   "cache_creation_input_tokens": 0,
+   "cache_read_input_tokens": 1874,
+   "inference_geo": "global",
+   "input_tokens": 2198,
+   "output_tokens": 396,
+   "output_tokens_details": {
+    "thinking_tokens": 0
+   },
+   "service_tier": "batch",
+   "speed": "standard"
+  }
+ },
+ "ff0234819dafdcbe": {
+  "container": null,
+  "content": [
+   {
+    "text": "{\"mentions\":[{\"local_id\":\"m1\",\"surface\":\"Andrew\",\"type\":\"Person\",\"context\":\"Thanks,\\nAndrew\"},{\"local_id\":\"m2\",\"surface\":\"Lucas\",\"type\":\"Person\",\"context\":\"Hi Lucas,\"},{\"local_id\":\"m3\",\"surface\":\"KIP-1043\",\"type\":\"KIP\",\"context\":\"Thread subject: [DISCUSS] KIP-1043: Administration of groups\"}],\"relations\":[{\"type\":\"REVIEWED\",\"source\":\"m2\",\"target\":\"m3\",\"vote_value\":null,\"binding\":null,\"confidence\":0.9},{\"type\":\"PROPOSED\",\"source\":\"m1\",\"target\":\"m3\",\"vote_value\":null,\"binding\":null,\"confidence\":0.85}]}",
+    "type": "text"
+   }
+  ],
+  "diagnostics": null,
+  "id": "msg_011CgD4BH2RXoDRBL6xCcUwS",
+  "model": "claude-sonnet-5-5",
+  "role": "assistant",
+  "stop_details": null,
+  "stop_reason": "end_turn",
+  "stop_sequence": null,
+  "type": "message",
+  "usage": {
+   "cache_creation": {
+    "ephemeral_1h_input_tokens": 0,
+    "ephemeral_5m_input_tokens": 0
+   },
+   "cache_creation_input_tokens": 0,
+   "cache_read_input_tokens": 1874,
+   "inference_geo": "global",
+   "input_tokens": 515,
+   "output_tokens": 248,
+   "output_tokens_details": {
+    "thinking_tokens": 0
+   },
+   "service_tier": "batch",
+   "speed": "standard"
+  }
+ },
+ "ff9c54ba13762a1b": {
+  "container": null,
+  "content": [
+   {
+    "text": "{\"mentions\":[{\"local_id\":\"m1\",\"surface\":\"Andrew\",\"type\":\"Person\",\"context\":\"Thanks.\\nAndrew\"},{\"local_id\":\"m2\",\"surface\":\"KIP-1043\",\"type\":\"KIP\",\"context\":\"I would like to start a discussion thread on KIP-1043: Administration of groups.\"}],\"relations\":[{\"type\":\"PROPOSED\",\"source\":\"m1\",\"target\":\"m2\",\"vote_value\":null,\"binding\":null,\"confidence\":0.95}]}",
+    "type": "text"
+   }
+  ],
+  "diagnostics": null,
+  "id": "msg_011CgD4NRFLRZFWKFTAEgeaH",
+  "model": "claude-sonnet-5-5",
+  "role": "assistant",
+  "stop_details": null,
+  "stop_reason": "end_turn",
+  "stop_sequence": null,
+  "type": "message",
+  "usage": {
+   "cache_creation": {
+    "ephemeral_1h_input_tokens": 0,
+    "ephemeral_5m_input_tokens": 0
+   },
+   "cache_creation_input_tokens": 0,
+   "cache_read_input_tokens": 1874,
+   "inference_geo": "global",
+   "input_tokens": 227,
+   "output_tokens": 162,
+   "output_tokens_details": {
+    "thinking_tokens": 0
+   },
+   "service_tier": "batch",
+   "speed": "standard"
+  }
+ }
+}
