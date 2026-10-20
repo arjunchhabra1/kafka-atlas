@@ -19,6 +19,8 @@ dependencies = [
   "langchain-anthropic>=1.7.6",
   "rich>=15.0.0",
   "numpy>=2.5.4",
+  "langchain-postgres>=0.0.19",
+  "langchain-voyageai>=0.4.1",
 ]
 
 [dependency-groups]

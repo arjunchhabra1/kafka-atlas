@@ -236,6 +236,26 @@ def build(
         typer.echo(f"WARNING: {w}")
 
 
+@app.command()
+def index() -> None:
+    """Embed documents and graph node names into pgvector (only items not yet indexed)."""
+    from kgrag.retrieve.embeddings import EmbeddingsNotConfiguredError, get_embeddings
+    from kgrag.retrieve.index import build_index
+
+    try:
+        get_embeddings()
+    except EmbeddingsNotConfiguredError as e:
+        typer.echo(str(e), err=True)
+        raise typer.Exit(1) from None
+    conn, driver = connect(), _neo4j_driver()
+    try:
+        apply_migrations(conn)
+        typer.echo(build_index(conn, driver))
+    finally:
+        conn.close()
+        driver.close()
+
+
 @app.command("graph-check")
 def graph_check(
     resolver: str = typer.Option("exact", help="Resolver used for the fixture graph."),
