@@ -176,12 +176,8 @@ def classify_kind(sender_name: str, sender_address: str) -> Literal["human", "ji
     return "human"
 
 
-def assign_threads(emails: list[RawEmail]) -> dict[str, str]:
-    """Map message_id -> thread_id (the root message_id).
-
-    The parent is In-Reply-To if present in `emails`, else the last
-    References entry present. Messages whose parents are unknown are roots.
-    """
+def assign_parents(emails: list[RawEmail]) -> dict[str, str]:
+    """Map message_id -> parent message_id (In-Reply-To, else the last References entry in the corpus)."""
     known = {e.message_id for e in emails}
     parent: dict[str, str] = {}
     for e in emails:
@@ -191,6 +187,17 @@ def assign_threads(emails: list[RawEmail]) -> dict[str, str]:
             if c in known and c != e.message_id:
                 parent[e.message_id] = c
                 break
+    return parent
+
+
+def assign_threads(emails: list[RawEmail]) -> dict[str, str]:
+    """Map message_id -> thread_id (the root message_id).
+
+    The parent is In-Reply-To if present in `emails`, else the last
+    References entry present. Messages whose parents are unknown are roots.
+    """
+    known = {e.message_id for e in emails}
+    parent = assign_parents(emails)
     threads = {}
     for mid in known:
         path = [mid]

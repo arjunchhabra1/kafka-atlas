@@ -9,7 +9,7 @@ from pydantic import BaseModel
 from kgrag.config import get_settings
 from kgrag.ingest.clean import clean_body
 from kgrag.ingest.jira import JiraEvent, parse_jira_notification
-from kgrag.ingest.parse import RawEmail, assign_threads, classify_kind, dedupe, parse_mbox
+from kgrag.ingest.parse import RawEmail, assign_parents, assign_threads, classify_kind, dedupe, parse_mbox
 from kgrag.store import repo
 
 
@@ -60,6 +60,7 @@ def _ingest(conn: psycopg.Connection, mbox_paths: list[Path]) -> IngestStats:
         raw.extend(parse_mbox(p, on_skip=on_skip))
     emails = dedupe(raw)
     thread_of = assign_threads(emails)
+    parent_of = assign_parents(emails)
 
     by_id = {e.message_id: e for e in emails}
     members: dict[str, list[RawEmail]] = {}
@@ -91,6 +92,7 @@ def _ingest(conn: psycopg.Connection, mbox_paths: list[Path]) -> IngestStats:
             id=eid, message_id=e.message_id, thread_id=thread_of[e.message_id], date=e.date,
             sender_name=e.sender_name, sender_address=e.sender_address, subject=e.subject,
             body_clean=body, kind=kind,
+            parent_message_id=parent_of.get(e.message_id),
         ))
 
     repo.upsert_threads(conn, threads)

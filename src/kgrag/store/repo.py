@@ -26,6 +26,7 @@ class EmailRow(BaseModel):
     subject: str
     body_clean: str
     kind: Literal["human", "jira"]
+    parent_message_id: str | None = None
 
 
 class Document(BaseModel):
@@ -111,12 +112,13 @@ def upsert_emails(conn: psycopg.Connection, rows: list[EmailRow]) -> int:
     with conn.cursor() as cur:
         cur.executemany(
             "insert into emails (id, message_id, thread_id, date, sender_name, sender_address, "
-            "subject, body_clean, kind) values (%(id)s, %(message_id)s, %(thread_id)s, %(date)s, "
-            "%(sender_name)s, %(sender_address)s, %(subject)s, %(body_clean)s, %(kind)s) "
+            "subject, body_clean, kind, parent_message_id) values (%(id)s, %(message_id)s, %(thread_id)s, %(date)s, "
+            "%(sender_name)s, %(sender_address)s, %(subject)s, %(body_clean)s, %(kind)s, %(parent_message_id)s) "
             "on conflict (id) do update set message_id = excluded.message_id, "
             "thread_id = excluded.thread_id, date = excluded.date, "
             "sender_name = excluded.sender_name, sender_address = excluded.sender_address, "
-            "subject = excluded.subject, body_clean = excluded.body_clean, kind = excluded.kind",
+            "subject = excluded.subject, body_clean = excluded.body_clean, kind = excluded.kind, "
+            "parent_message_id = excluded.parent_message_id",
             [r.model_dump() for r in rows],
         )
     return len(rows)
@@ -244,7 +246,7 @@ def select_unextracted(
     """Human emails with no llm_cache row for (prompt_version, model), by date then id."""
     sql = (
         "select id, message_id, thread_id, date, sender_name, sender_address, subject, "
-        "body_clean, kind from emails e where kind = 'human' and not exists ("
+        "body_clean, kind, parent_message_id from emails e where kind = 'human' and not exists ("
         "select 1 from llm_cache c where c.email_id = e.id and c.prompt_version = %s "
         "and c.model = %s) order by date, id"
     )

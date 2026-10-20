@@ -11,7 +11,8 @@ def test_apply_migrations_idempotent(pg_conn):
     pg_conn.commit()
 
     assert apply_migrations(pg_conn) == ["001_init.sql", "002_extraction.sql", "003_questions.sql",
-                                       "004_resolutions.sql"]
+                                       "004_resolutions.sql",
+                                       "005_email_parent.sql"]
     assert apply_migrations(pg_conn) == []
     row = pg_conn.execute("select to_regclass('public.documents')").fetchone()
     assert row[0] == "documents"

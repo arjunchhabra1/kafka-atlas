@@ -21,6 +21,7 @@ from kgrag.ingest.pipeline import ingest as run_ingest
 from kgrag.questions.draft import avg_doc_tokens, draft_questions, estimate_draft_cost_usd
 from kgrag.questions.review import review_session
 from kgrag.questions.split import AlreadySplitError, persist_splits
+from kgrag.graph.build import build_graph
 from kgrag.store.db import apply_migrations, connect
 from kgrag.resolve.exact_match import ExactMatchResolver
 from kgrag.resolve.interface import resolve_all
@@ -158,12 +159,80 @@ def resolve(
             raise typer.Exit(1) from None
         elapsed = time.perf_counter() - start
         save_resolution(conn, resolver, result)
+        conn.commit()  # save_resolution joins the open transaction; close() would roll it back
     finally:
         conn.close()
     typer.echo(f"{resolver}: {len(mentions)} mentions -> {len(result.canonical_names)} entities "
                f"in {elapsed:.1f}s")
     for etype, n in sorted(Counter(result.entity_types.values()).items()):
         typer.echo(f"  {etype}: {n}")
+
+
+def _neo4j_driver() -> Any:
+    from neo4j import GraphDatabase
+
+    s = get_settings()
+    return GraphDatabase.driver(s.neo4j_uri, auth=(s.neo4j_user, s.neo4j_password))
+
+
+@app.command()
+def build(
+    resolver: str = typer.Option("exact", help="Stored resolution to build from: exact or user."),
+) -> None:
+    """Clear Neo4j and rebuild the knowledge graph from Postgres using a stored resolution."""
+    if resolver not in ("exact", "user"):
+        raise typer.BadParameter("resolver must be one of ['exact', 'user']")
+    conn, driver = connect(), _neo4j_driver()
+    try:
+        apply_migrations(conn)
+        start = time.perf_counter()
+        try:
+            stats = build_graph(conn, driver, resolver)
+        except ValueError as e:
+            typer.echo(str(e))
+            raise typer.Exit(1) from None
+        elapsed = time.perf_counter() - start
+    finally:
+        conn.close()
+        driver.close()
+    typer.echo(f"graph built from '{resolver}' in {elapsed:.1f}s: "
+               f"{sum(stats.nodes.values())} nodes, {sum(stats.rels.values())} relationships")
+    for label, n in stats.nodes.items():
+        typer.echo(f"  node {label}: {n}")
+    for rtype, n in stats.rels.items():
+        typer.echo(f"  rel {rtype}: {n}")
+    for reason, n in stats.skipped.items():
+        typer.echo(f"  skipped {reason}: {n}")
+
+
+@app.command("graph-check")
+def graph_check(
+    resolver: str = typer.Option("exact", help="Resolver used for the fixture graph."),
+    hops: int = typer.Option(3, help="BFS depth for the reachability check."),
+    fixture: bool = typer.Option(False, "--fixture", help="Also build the dev-fixture graph in a "
+                                 "throwaway Neo4j container and report reachability."),
+) -> None:
+    """Diagnostic: connectivity of the current graph, and optionally whether traversal reaches gold docs."""
+    from kgrag.graph.check import (
+        connectivity,
+        format_connectivity,
+        format_reachability,
+        load_dev_questions,
+        reachability,
+    )
+
+    driver = _neo4j_driver()
+    try:
+        typer.echo("current graph\n" + format_connectivity(connectivity(driver)))
+    finally:
+        driver.close()
+    if fixture:
+        from kgrag.graph.fixture_graph import fixture_graph
+
+        with fixture_graph(resolver) as fx_driver:
+            typer.echo("\nfixture graph\n" + format_connectivity(connectivity(fx_driver)))
+            typer.echo("\n" + format_reachability(
+                reachability(fx_driver, load_dev_questions(), hops)))
 
 
 QUESTION_TYPES = ("single_hop", "inference", "comparison", "temporal", "null")
