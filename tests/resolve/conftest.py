@@ -6,6 +6,7 @@ from pathlib import Path
 
 import pytest
 
+from kgrag.extract.schema import AnchorHints
 from kgrag.resolve.resolver import UserResolver
 from kgrag.store.repo import load_anchor_hints, load_mentions
 
@@ -53,17 +54,18 @@ def gold(gold_clusters):
     return {mid: f"{c['type']}:{c['entity']}" for c in gold_clusters for mid in c["mention_ids"]}
 
 
+_EMPTY_HINTS = AnchorHints(sender_pairs=[], jira_actors=[])
+
+
 def user_resolver_implemented() -> bool:
+    """False only if the stub raises NotImplementedError; any other outcome means implemented."""
     try:
         UserResolver().resolve([], _EMPTY_HINTS)
     except NotImplementedError:
         return False
+    except Exception:  # noqa: BLE001 - implemented; the real tests will surface the error
+        return True
     return True
-
-
-from kgrag.extract.schema import AnchorHints  # noqa: E402
-
-_EMPTY_HINTS = AnchorHints(sender_pairs=[], jira_actors=[])
 
 
 @pytest.fixture(scope="session")

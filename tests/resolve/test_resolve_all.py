@@ -4,7 +4,6 @@ from kgrag.eval.bcubed import bcubed
 from kgrag.extract.schema import AnchorHints, Mention
 from kgrag.resolve.exact_match import ExactMatchResolver
 from kgrag.resolve.interface import resolve_all
-from kgrag.resolve.resolver import UserResolver
 
 HINTS = AnchorHints(sender_pairs=[], jira_actors=[])
 
@@ -54,11 +53,6 @@ def test_resolve_all_prefixes_resolver_ids():
 
     res = resolve_all(Bare(), [_m("e:m1", "broker", "Component")], HINTS)
     assert res.assignments["e:m1"] == "Component:x1" and res.canonical_names["Component:x1"] == "X"
-
-
-def test_user_resolver_is_still_a_stub():
-    with pytest.raises(NotImplementedError):
-        UserResolver().resolve([], HINTS)
 
 
 @pytest.mark.integration

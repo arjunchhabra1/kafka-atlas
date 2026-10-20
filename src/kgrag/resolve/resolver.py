@@ -29,7 +29,9 @@ Output: `Resolution`
 
 Rules
   * Pure function: no database, network or LLM-cache access, just these two arguments.
-  * Deterministic: same input -> same output (the contract test shuffles input order).
+  * Deterministic: the contract test calls resolve() directly on the mentions and on a
+    shuffled copy and requires the same groups, canonical names and types (entity ids may
+    differ); it also runs resolve_all twice and requires identical output.
   * Be careful with shared first names (two different Davids/Chrises must NOT merge).
 
 Check your work

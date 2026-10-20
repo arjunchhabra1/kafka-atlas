@@ -12,7 +12,7 @@ pytestmark = pytest.mark.quality
 
 
 @pytest.fixture(scope="module")
-def predicted(user_resolver, fixture_mentions, fixture_hints, gold):
+def predicted(user_resolver, fixture_mentions, fixture_hints):
     return resolve_all(user_resolver, fixture_mentions, fixture_hints).assignments
 
 
@@ -27,6 +27,7 @@ def test_bcubed_at_least_0_85(predicted, gold):
 
 
 def test_shared_first_name_not_merged(predicted, gold_clusters):
+    """Only checks the tagged clusters against each other; B3 covers the rest."""
     tagged = _tagged(gold_clusters, "shared_first_name")
     assert len(tagged) >= 2
     entity_of = {c["entity"]: {predicted[m] for m in c["mention_ids"]} for c in tagged}
