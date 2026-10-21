@@ -16,14 +16,14 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
 FIXTURES = ROOT / "tests" / "fixtures"
 OUT = FIXTURES / "recorded_embeddings.json"
-BATCH = 16  # small: unbilled Voyage accounts are limited to 3 RPM / 10K TPM
+BATCH = 128
 
 
 def with_retry(fn, *args):
     """Call fn, sleeping and retrying on provider rate limits."""
     import time
 
-    for attempt in range(60):
+    for attempt in range(8):
         try:
             return fn(*args)
         except Exception as e:
