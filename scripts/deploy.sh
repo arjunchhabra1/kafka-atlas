@@ -36,10 +36,18 @@ SECRETS+=",KGRAG_NEO4J_PASSWORD=NEO4J_PASSWORD:latest"
 SECRETS+=",DB_PASS=DB_PASS:latest"
 SECRETS+=",LANGFUSE_PUBLIC_KEY=LANGFUSE_PUBLIC_KEY:latest"
 SECRETS+=",LANGFUSE_SECRET_KEY=LANGFUSE_SECRET_KEY:latest"
-SECRETS+=",KGRAG_API_KEY=KGRAG_API_KEY:latest"
+# The API key binding is always present unless NO_API_KEY=1 (then the app needs KGRAG_ALLOW_OPEN=1).
+NO_API_KEY=${NO_API_KEY:-0}
+if [[ "$NO_API_KEY" != "1" ]]; then
+  SECRETS+=",KGRAG_API_KEY=KGRAG_API_KEY:latest"
+fi
+SERVICE_ACCOUNT=${SERVICE_ACCOUNT:-}   # dedicated runtime SA (see docs/DEPLOY.md); default SA is broader
 
 ENV_VARS="KGRAG_DB_MODE=cloudsql,INSTANCE_CONNECTION_NAME=$INSTANCE_CONNECTION_NAME"
 ENV_VARS+=",DB_USER=$DB_USER,DB_NAME=$DB_NAME"
+if [[ "$NO_API_KEY" == "1" ]]; then
+  ENV_VARS+=",KGRAG_ALLOW_OPEN=1"
+fi
 ENV_VARS+=",KGRAG_NEO4J_URI=$NEO4J_URI,KGRAG_NEO4J_USER=$NEO4J_USER,LANGFUSE_HOST=$LANGFUSE_HOST"
 
 BUILD=(gcloud builds submit --project "$PROJECT" --tag "$IMAGE" .)
@@ -47,7 +55,16 @@ DEPLOY=(gcloud run deploy "$SERVICE" --project "$PROJECT" --region "$REGION" --i
   --add-cloudsql-instances "$INSTANCE_CONNECTION_NAME"
   --min-instances 0 --max-instances "$MAX_INSTANCES" --concurrency "$CONCURRENCY"
   --set-env-vars "$ENV_VARS" --set-secrets "$SECRETS")
+if [[ -n "$SERVICE_ACCOUNT" ]]; then
+  DEPLOY+=(--service-account "$SERVICE_ACCOUNT")
+fi
+HAS_KEY_BINDING=0
+[[ "$SECRETS" == *"KGRAG_API_KEY=KGRAG_API_KEY:latest"* ]] && HAS_KEY_BINDING=1
 if [[ "${ALLOW_UNAUTHENTICATED:-0}" == "1" ]]; then
+  if [[ "$HAS_KEY_BINDING" != "1" ]]; then
+    echo "refusing: ALLOW_UNAUTHENTICATED=1 requires the KGRAG_API_KEY secret binding (do not set NO_API_KEY=1)" >&2
+    exit 2
+  fi
   DEPLOY+=(--allow-unauthenticated)
 else
   DEPLOY+=(--no-allow-unauthenticated)
@@ -55,7 +72,13 @@ fi
 
 echo "Project: $PROJECT   Region: $REGION   Service: $SERVICE"
 echo "Max instances: $MAX_INSTANCES   Concurrency: $CONCURRENCY   Min instances: 0"
-echo "Public access: $([[ "${ALLOW_UNAUTHENTICATED:-0}" == "1" ]] && echo "allowed (protected by X-API-Key)" || echo "no (IAM-authenticated callers only)")"
+if [[ "${ALLOW_UNAUTHENTICATED:-0}" == "1" ]]; then
+  echo "Public access: allowed (protected by X-API-Key, secret KGRAG_API_KEY bound)"
+else
+  echo "Public access: no (IAM-authenticated callers only)"
+fi
+echo "API key: $([[ "$HAS_KEY_BINDING" == "1" ]] && echo "required on /ask" || echo "NOT bound; /ask is open (KGRAG_ALLOW_OPEN=1)")"
+echo "Runtime service account: ${SERVICE_ACCOUNT:-<project default; set SERVICE_ACCOUNT to use a dedicated one>}"
 echo "Secrets (names only) from Secret Manager in $PROJECT: ${SECRETS//,/ }"
 echo
 echo "Will run:"

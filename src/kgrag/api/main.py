@@ -171,11 +171,27 @@ def _postgres_down() -> JSONResponse:
 def require_api_key(x_api_key: str = Header(default="")) -> None:
     """Optional shared secret: when env KGRAG_API_KEY is set, /ask needs a matching X-API-Key."""
     expected = os.environ.get("KGRAG_API_KEY")
-    if expected and not secrets.compare_digest(x_api_key.encode(), expected.encode()):
+    if expected is None:
+        return
+    # present-but-empty never matches (fail closed); startup also refuses to run that way
+    if not expected or not secrets.compare_digest(x_api_key.encode(), expected.encode()):
         raise HTTPException(status_code=401, detail="invalid or missing API key")
 
 
+def check_access_config() -> bool:
+    """Refuse unsafe auth configuration at startup; returns True when /ask is key-protected."""
+    key = os.environ.get("KGRAG_API_KEY")
+    if key is not None and not key.strip():
+        raise RuntimeError("KGRAG_API_KEY is set but empty; unset it or give it a value")
+    if key is None and get_settings().db_mode == "cloudsql" and os.environ.get("KGRAG_ALLOW_OPEN") != "1":
+        raise RuntimeError(
+            "cloudsql mode requires KGRAG_API_KEY (or KGRAG_ALLOW_OPEN=1 to run /ask unauthenticated)"
+        )
+    return key is not None
+
+
 def create_app(deps: Deps | None = None) -> FastAPI:
+    protected = check_access_config()
     d = deps or default_deps()
 
     @asynccontextmanager
@@ -185,7 +201,12 @@ def create_app(deps: Deps | None = None) -> FastAPI:
         finally:
             d.close()
 
-    app = FastAPI(title="Kafka Atlas", lifespan=lifespan)
+    hidden = protected or get_settings().db_mode == "cloudsql"  # no public API docs on a deployed service
+    app = FastAPI(
+        title="Kafka Atlas", lifespan=lifespan,
+        docs_url=None if hidden else "/docs", redoc_url=None if hidden else "/redoc",
+        openapi_url=None if hidden else "/openapi.json",
+    )
 
     @traced("api.ask")
     def run_ask(req: AskRequest) -> AskResponse:

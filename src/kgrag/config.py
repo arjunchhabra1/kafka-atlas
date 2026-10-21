@@ -67,7 +67,18 @@ class Settings(BaseSettings):
 
 @lru_cache(maxsize=1)
 def get_settings() -> Settings:
-    return Settings()
+    s = Settings()
+    if s.db_mode == "cloudsql":
+        _refuse_dev_defaults(s)
+    return s
+
+
+def _refuse_dev_defaults(s: Settings) -> None:
+    """A cloud deployment must not silently fall back to the local-dev values in config.yaml."""
+    if s.neo4j_password == "devpassword":
+        raise ValueError("cloudsql mode: neo4j_password is the dev default; set KGRAG_NEO4J_PASSWORD")
+    if any(h in s.neo4j_uri for h in ("localhost", "127.0.0.1", "[::1]")):
+        raise ValueError("cloudsql mode: neo4j_uri points at localhost; set KGRAG_NEO4J_URI")
 
 
 def config_hash(s: Settings) -> str:

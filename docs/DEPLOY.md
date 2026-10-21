@@ -6,9 +6,8 @@ embeddings, and AuraDB holds the graph. Secrets live in Secret Manager; Langfuse
 ## Graph size vs AuraDB Free
 
 Current local graph (`GraphMeta`, resolver `user`, built 2026-10-21): **24,376 nodes, 54,127 relationships**.
-AuraDB Free has historically allowed 200,000 nodes and 400,000 relationships; confirm the current
-limits in the Aura console before loading. If the limits are lower than the numbers above, stop and
-use AuraDB Professional instead.
+Check the current Free-tier node and relationship limits in the Aura console. If they are below this
+graph's 24,376 nodes / 54,127 relationships, use a paid tier.
 
 ## Prerequisites (you create these; they use your accounts and billing)
 
@@ -20,7 +19,11 @@ use AuraDB Professional instead.
 5. A Langfuse Cloud project (public and secret key).
 6. Secret Manager secrets (names exactly): `ANTHROPIC_API_KEY`, `VOYAGE_API_KEY`, `NEO4J_PASSWORD`,
    `DB_PASS`, `LANGFUSE_PUBLIC_KEY`, `LANGFUSE_SECRET_KEY`, `KGRAG_API_KEY` (a long random string clients send as `X-API-Key`).
-   Grant the Cloud Run runtime service account `Secret Manager Secret Accessor` and `Cloud SQL Client`.
+   Create a dedicated runtime service account holding only `Secret Manager Secret Accessor` and `Cloud SQL Client`
+   (not the default compute SA, which is broad) and pass it as `SERVICE_ACCOUNT=name@PROJECT.iam.gserviceaccount.com`:
+   `gcloud iam service-accounts create kafka-atlas-run --project PROJECT`, then
+   `gcloud projects add-iam-policy-binding PROJECT --member serviceAccount:kafka-atlas-run@PROJECT.iam.gserviceaccount.com --role roles/secretmanager.secretAccessor`
+   and the same with `roles/cloudsql.client`.
 7. Locally: `gcloud auth login`, `cloud-sql-proxy`, and `uv`.
 8. `models.embed` in `config.yaml` must be a real Voyage model (not `voyage-TBD-...`) before `index` and `/ask` vector search work.
 
@@ -30,10 +33,13 @@ use AuraDB Professional instead.
 export INSTANCE_CONNECTION_NAME=PROJECT:REGION:INSTANCE
 export NEO4J_URI=neo4j+s://XXXX.databases.neo4j.io
 
-# 1. Load data from your laptop (prints the plan and asks first; DRY_RUN=1 to only print)
-DB_PASS=... NEO4J_PASSWORD=... FROM=YYYY-MM TO=YYYY-MM scripts/load_cloud.sh PROJECT REGION
+# 1. Load data from your laptop (prints the plan and asks first; DRY_RUN=1 to only print).
+#    Enter passwords without them landing in shell history or the process list:
+read -rs -p "Cloud SQL password: " DB_PASS; export DB_PASS; echo
+read -rs -p "AuraDB password: " NEO4J_PASSWORD; export NEO4J_PASSWORD; echo
+FROM=YYYY-MM TO=YYYY-MM scripts/load_cloud.sh PROJECT REGION
 
-# 2. Build and deploy (prints the plan and asks first; DRY_RUN=1 to only print)
+# 2. Build and deploy (SERVICE_ACCOUNT=... recommended) (prints the plan and asks first; DRY_RUN=1 to only print)
 scripts/deploy.sh PROJECT REGION
 
 # 3. Verify (the service is IAM-protected by default; set ALLOW_UNAUTHENTICATED=1 to make it public)
@@ -47,7 +53,15 @@ Then check the trace appears in Langfuse. When `KGRAG_API_KEY` is set, `/ask` re
 `X-API-Key`; `/health` stays open.
 
 Overridable env vars: `deploy.sh` takes `MAX_INSTANCES` (default 2), `CONCURRENCY` (10), `DB_USER`/`DB_NAME`
-(`kgrag`), `NEO4J_USER`, `LANGFUSE_HOST`, `REPO`, `SERVICE`. `load_cloud.sh` takes `PROXY_PORT` (5433), `RESOLVER` (`exact`).
+(`kgrag`), `NEO4J_USER`, `LANGFUSE_HOST`, `REPO`, `SERVICE`, `SERVICE_ACCOUNT`, `NO_API_KEY=1` (drops the key; sets `KGRAG_ALLOW_OPEN=1`; incompatible with `ALLOW_UNAUTHENTICATED=1`). `load_cloud.sh` takes `PROXY_PORT` (5433), `RESOLVER` (`exact`).
+
+## Safety defaults
+
+- In cloudsql mode the app refuses to start without a non-empty `KGRAG_API_KEY` (or an explicit `KGRAG_ALLOW_OPEN=1`),
+  refuses an empty `KGRAG_API_KEY`, refuses the dev Neo4j password/localhost URI, and serves no `/docs` or `/openapi.json`.
+- The connector reaches Cloud SQL over its public IP with an IAM-authorised TLS tunnel; the `--add-cloudsql-instances`
+  unix-socket attachment is kept (the flag is what grants the instance link) but is not used by the app.
+- Failed-key attempts still reach Cloud Run, but their cost is bounded by the instance and concurrency caps and they do no paid work.
 
 ## Resuming a paused AuraDB
 

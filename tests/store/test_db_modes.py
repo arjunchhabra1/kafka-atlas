@@ -28,6 +28,8 @@ def _cloud_env(monkeypatch):
     monkeypatch.setenv("DB_USER", "app")
     monkeypatch.setenv("DB_PASS", "s3cret")
     monkeypatch.setenv("DB_NAME", "kgrag")
+    monkeypatch.setenv("KGRAG_NEO4J_PASSWORD", "not-the-dev-default")
+    monkeypatch.setenv("KGRAG_NEO4J_URI", "neo4j+s://x.databases.neo4j.io")
 
 
 def test_cloudsql_mode_uses_connector(monkeypatch):
@@ -81,3 +83,21 @@ def test_vector_store_connection_cloudsql_is_engine_using_connect(monkeypatch):
         assert engine.pool._creator() == "cloud-conn"  # SQLAlchemy opens connections via db.connect
     finally:
         engine.dispose()
+
+
+def test_cloudsql_mode_refuses_dev_neo4j_password(monkeypatch):
+    _cloud_env(monkeypatch)
+    monkeypatch.setenv("KGRAG_NEO4J_PASSWORD", "devpassword")
+    with pytest.raises(ValueError, match="neo4j_password"):
+        get_settings()
+
+
+def test_cloudsql_mode_refuses_localhost_neo4j_uri(monkeypatch):
+    _cloud_env(monkeypatch)
+    monkeypatch.setenv("KGRAG_NEO4J_URI", "bolt://localhost:7687")
+    with pytest.raises(ValueError, match="neo4j_uri"):
+        get_settings()
+
+
+def test_default_mode_keeps_dev_defaults():
+    assert get_settings().neo4j_password == "devpassword"

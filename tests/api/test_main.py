@@ -11,6 +11,14 @@ from kgrag.api.main import AURA_HINT, Deps, create_app
 from kgrag.retrieve.types import Evidence, RetrievalResult
 
 
+@pytest.fixture(autouse=True)
+def _fresh_settings():
+    from kgrag.config import get_settings
+    get_settings.cache_clear()
+    yield
+    get_settings.cache_clear()
+
+
 def _row(doc_id: str, text: str):
     return (doc_id, "email", doc_id, 0, text, 10, datetime(2024, 5, 1, tzinfo=timezone.utc),
             f"sender-{doc_id}", f"subject-{doc_id}")
@@ -338,3 +346,53 @@ def test_api_key_compare_is_constant_time(monkeypatch):
     client, _ = make_client()
     _ask(client, {"X-API-Key": "wrong"})
     assert seen == [(b"wrong", b"s3cret")]
+
+
+def _cloud(monkeypatch, **env):
+    for k in ("KGRAG_API_KEY", "KGRAG_ALLOW_OPEN"):
+        monkeypatch.delenv(k, raising=False)
+    monkeypatch.setenv("KGRAG_DB_MODE", "cloudsql")
+    monkeypatch.setenv("KGRAG_NEO4J_PASSWORD", "prod-pw")
+    monkeypatch.setenv("KGRAG_NEO4J_URI", "neo4j+s://x.databases.neo4j.io")
+    for k, v in env.items():
+        monkeypatch.setenv(k, v)
+    from kgrag.config import get_settings
+    get_settings.cache_clear()
+
+
+def test_empty_configured_key_refuses_startup(monkeypatch):
+    monkeypatch.setenv("KGRAG_API_KEY", "")
+    with pytest.raises(RuntimeError, match="KGRAG_API_KEY"):
+        make_client()
+
+
+def test_cloudsql_without_key_refuses_startup(monkeypatch):
+    _cloud(monkeypatch)
+    with pytest.raises(RuntimeError, match="KGRAG_ALLOW_OPEN"):
+        make_client()
+
+
+def test_cloudsql_allow_open_starts(monkeypatch):
+    _cloud(monkeypatch, KGRAG_ALLOW_OPEN="1")
+    client, _ = make_client()
+    assert _ask(client).status_code == 200
+
+
+def test_cloudsql_with_key_starts_and_enforces(monkeypatch):
+    _cloud(monkeypatch, KGRAG_API_KEY="k")
+    client, _ = make_client()
+    assert _ask(client).status_code == 401
+    assert _ask(client, {"X-API-Key": "k"}).status_code == 200
+
+
+def test_docs_disabled_when_key_configured(monkeypatch):
+    monkeypatch.setenv("KGRAG_API_KEY", "k")
+    client, _ = make_client()
+    for path in ("/docs", "/redoc", "/openapi.json"):
+        assert client.get(path).status_code == 404
+
+
+def test_docs_available_without_key(monkeypatch):
+    monkeypatch.delenv("KGRAG_API_KEY", raising=False)
+    client, _ = make_client()
+    assert client.get("/openapi.json").status_code == 200

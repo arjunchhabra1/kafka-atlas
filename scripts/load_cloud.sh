@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 # Load the corpus into Cloud SQL (via the Cloud SQL Auth Proxy) and AuraDB from this machine.
 #
-# usage: INSTANCE_CONNECTION_NAME=proj:region:inst NEO4J_URI=neo4j+s://xxxx.databases.neo4j.io \
-#        DB_PASS=... NEO4J_PASSWORD=... FROM=2023-01 TO=2024-06 scripts/load_cloud.sh PROJECT REGION
+# usage: (export DB_PASS and NEO4J_PASSWORD first, see docs/DEPLOY.md)
+#        INSTANCE_CONNECTION_NAME=proj:region:inst NEO4J_URI=neo4j+s://xxxx.databases.neo4j.io \
+#        FROM=2023-01 TO=2024-06 scripts/load_cloud.sh PROJECT REGION
 #
 # Needs: gcloud (already logged in), cloud-sql-proxy, uv. Prints the plan and asks first
 # (YES=1 skips the prompt, DRY_RUN=1 only prints). Passwords are read from the environment and
@@ -64,10 +65,16 @@ export KGRAG_NEO4J_URI="$NEO4J_URI" KGRAG_NEO4J_USER="$NEO4J_USER" KGRAG_NEO4J_P
 cloud-sql-proxy --project "$PROJECT" --port "$PROXY_PORT" "$INSTANCE_CONNECTION_NAME" &
 PROXY_PID=$!
 trap 'kill "$PROXY_PID" 2>/dev/null || true' EXIT
+UP=0
 for _ in $(seq 1 30); do
-  (exec 3<>"/dev/tcp/127.0.0.1/$PROXY_PORT") 2>/dev/null && break
+  kill -0 "$PROXY_PID" 2>/dev/null || { echo "cloud-sql-proxy exited early; check gcloud login and instance name" >&2; exit 1; }
+  if (exec 3<>"/dev/tcp/127.0.0.1/$PROXY_PORT") 2>/dev/null; then UP=1; break; fi
   sleep 1
 done
+if [[ "$UP" != "1" ]]; then
+  echo "cloud-sql-proxy did not open 127.0.0.1:$PROXY_PORT within 30s" >&2
+  exit 1
+fi
 
 for s in "${STEPS[@]}"; do
   echo ">>> $s"
