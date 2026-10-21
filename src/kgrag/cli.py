@@ -500,8 +500,11 @@ def judge_check(
 
 
 @app.command()
-def serve(port: int = typer.Option(8000, "--port", help="Port to listen on.")) -> None:
+def serve(
+    port: int = typer.Option(8000, "--port", envvar="PORT", help="Port to listen on (PORT env honoured)."),
+    host: str = typer.Option("0.0.0.0", "--host", help="Interface to bind."),
+) -> None:
     """Run the HTTP API (POST /ask, GET /health)."""
     import uvicorn
 
-    uvicorn.run("kgrag.api.main:app", host="0.0.0.0", port=port)
+    uvicorn.run("kgrag.api.main:app", host=host, port=port)

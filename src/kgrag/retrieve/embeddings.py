@@ -21,16 +21,21 @@ class EmbeddingsNotConfiguredError(RuntimeError):
     pass
 
 
+def embeddings_configured() -> bool:
+    """True when a real embedding model and API key are set (never calls the provider)."""
+    model = get_settings().models.embed
+    return not model.startswith(PLACEHOLDER_MODEL_PREFIX) and bool(os.environ.get("VOYAGE_API_KEY"))
+
+
 def get_embeddings() -> Embeddings:
     """Process-wide embeddings; the Voyage client is built lazily on first use."""
     global _embeddings
     if _embeddings is None:
-        model = get_settings().models.embed
-        if model.startswith(PLACEHOLDER_MODEL_PREFIX) or not os.environ.get("VOYAGE_API_KEY"):
+        if not embeddings_configured():
             raise EmbeddingsNotConfiguredError(_SETUP_HINT)
         from langchain_voyageai import VoyageAIEmbeddings
 
-        _embeddings = VoyageAIEmbeddings(model=model)
+        _embeddings = VoyageAIEmbeddings(model=get_settings().models.embed)
     return _embeddings
 
 

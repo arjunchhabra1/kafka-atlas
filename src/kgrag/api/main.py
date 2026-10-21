@@ -2,13 +2,14 @@
 
 import logging
 import time
-from collections.abc import Callable
-from contextlib import ExitStack
+from collections.abc import AsyncIterator, Callable
+from contextlib import ExitStack, asynccontextmanager
 from dataclasses import dataclass
 from threading import Lock
 from typing import Any, Literal
 
 import psycopg
+import sqlalchemy.exc
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 from neo4j.exceptions import ServiceUnavailable, SessionExpired
@@ -17,6 +18,7 @@ from pydantic import BaseModel, Field
 from kgrag.answer.chain import Answer
 from kgrag.config import get_settings
 from kgrag.observability import tag_current_trace, traced
+from kgrag.retrieve.embeddings import EmbeddingsNotConfiguredError, embeddings_configured
 from kgrag.retrieve.types import RetrievalResult
 from kgrag.store import repo
 
@@ -25,24 +27,28 @@ log = logging.getLogger(__name__)
 AURA_HINT = "AuraDB Free instances pause after inactivity; resume it in the Aura console."
 SNIPPET_CHARS = 300
 NEO4J_ERRORS = (ServiceUnavailable, SessionExpired)
+PG_ERRORS = (psycopg.OperationalError, psycopg.InterfaceError,
+             sqlalchemy.exc.OperationalError, sqlalchemy.exc.DBAPIError)
+NEO4J_TIMEOUT_S = 5
 
 
 @dataclass
 class Deps:
     """Everything the endpoints need; tests inject fakes.
 
-    `vector_retriever` has `.retrieve(question, budget_tokens)`. `graph_retrieve(question, kg, budget)`
+    `vector_retriever` has `.retrieve(question, budget_tokens)`. `graph_retrieve(question, budget)`
     is the graph retriever. `answer_fn(question, result, docs)` produces the Answer.
     `conn_factory()` returns a fresh Postgres connection (one per request, closed after).
     `neo4j_ping()` raises if Neo4j is unreachable.
     """
 
     vector_retriever: Any
-    kg: Any
-    graph_retrieve: Callable[[str, Any, int], RetrievalResult]
+    graph_retrieve: Callable[[str, int], RetrievalResult]
     answer_fn: Callable[[str, RetrievalResult, dict], Answer]
     conn_factory: Callable[[], psycopg.Connection]
     neo4j_ping: Callable[[], None]
+    embeddings_configured: Callable[[], bool] = embeddings_configured
+    close: Callable[[], None] = lambda: None
 
 
 class AskRequest(BaseModel):
@@ -81,7 +87,10 @@ class _Resources:
                 from neo4j import GraphDatabase
 
                 s = get_settings()
-                self._driver = GraphDatabase.driver(s.neo4j_uri, auth=(s.neo4j_user, s.neo4j_password))
+                self._driver = GraphDatabase.driver(
+                    s.neo4j_uri, auth=(s.neo4j_user, s.neo4j_password),
+                    connection_timeout=NEO4J_TIMEOUT_S, connection_acquisition_timeout=NEO4J_TIMEOUT_S,
+                )
             return self._driver
 
     def stores(self) -> tuple[Any, Any]:
@@ -91,6 +100,14 @@ class _Resources:
 
                 self._stores = self._stack.enter_context(open_stores())
             return self._stores
+
+    def close(self) -> None:
+        with self._lock:
+            self._stack.close()
+            self._stores = None
+            if self._driver is not None:
+                self._driver.close()
+                self._driver = None
 
     def ping(self) -> None:
         self.driver().verify_connectivity()
@@ -105,7 +122,7 @@ class _Resources:
         finally:
             conn.close()
 
-    def retrieve_graph(self, question: str, _kg: Any, budget_tokens: int) -> RetrievalResult:
+    def retrieve_graph(self, question: str, budget_tokens: int) -> RetrievalResult:
         from kgrag.graph.kg import KnowledgeGraph
         from kgrag.retrieve import graph_retriever
         from kgrag.store.db import connect
@@ -136,8 +153,8 @@ def default_deps() -> Deps:
 
     res = _Resources()
     return Deps(
-        vector_retriever=_VectorAdapter(res), kg=None, graph_retrieve=res.retrieve_graph,
-        answer_fn=_default_answer, conn_factory=connect, neo4j_ping=res.ping,
+        vector_retriever=_VectorAdapter(res), graph_retrieve=res.retrieve_graph,
+        answer_fn=_default_answer, conn_factory=connect, neo4j_ping=res.ping, close=res.close,
     )
 
 
@@ -151,7 +168,15 @@ def _postgres_down() -> JSONResponse:
 
 def create_app(deps: Deps | None = None) -> FastAPI:
     d = deps or default_deps()
-    app = FastAPI(title="Kafka Atlas")
+
+    @asynccontextmanager
+    async def lifespan(_: FastAPI) -> AsyncIterator[None]:
+        try:
+            yield
+        finally:
+            d.close()
+
+    app = FastAPI(title="Kafka Atlas", lifespan=lifespan)
 
     @traced("api.ask")
     def run_ask(req: AskRequest) -> AskResponse:
@@ -161,7 +186,7 @@ def create_app(deps: Deps | None = None) -> FastAPI:
         if req.system == "vector":
             result = d.vector_retriever.retrieve(req.question, budget)
         else:
-            result = d.graph_retrieve(req.question, d.kg, budget)
+            result = d.graph_retrieve(req.question, budget)
         conn = d.conn_factory()
         try:
             ids = list(dict.fromkeys(e.doc_id for e in result.evidence))
@@ -188,7 +213,9 @@ def create_app(deps: Deps | None = None) -> FastAPI:
         except NEO4J_ERRORS:
             log.warning("neo4j unavailable during /ask", exc_info=True)
             return _neo4j_down()
-        except psycopg.OperationalError:
+        except EmbeddingsNotConfiguredError:
+            return JSONResponse({"detail": "embeddings not configured"}, status_code=503)
+        except PG_ERRORS:
             log.warning("postgres unavailable during /ask", exc_info=True)
             return _postgres_down()
         except Exception:  # noqa: BLE001 - never leak internals to clients
@@ -197,17 +224,18 @@ def create_app(deps: Deps | None = None) -> FastAPI:
 
     @app.get("/health")
     def health():
+        embeddings = "ok" if d.embeddings_configured() else "not configured"
         try:
             d.conn_factory().close()
-        except psycopg.OperationalError:
+        except Exception:  # noqa: BLE001 - any failure means the dependency is unavailable
             log.warning("postgres health check failed", exc_info=True)
             return _postgres_down()
         try:
             d.neo4j_ping()
-        except NEO4J_ERRORS:
+        except Exception:  # noqa: BLE001
             log.warning("neo4j health check failed", exc_info=True)
             return _neo4j_down()
-        return {"postgres": "ok", "neo4j": "ok"}
+        return {"postgres": "ok", "neo4j": "ok", "embeddings": embeddings}
 
     @app.exception_handler(Exception)
     async def unhandled(_: Request, exc: Exception) -> JSONResponse:
