@@ -14,8 +14,8 @@ def _q(qid, qtype, recall, full, verdict, gold=("d1",)):
             "error": None}
 
 
-def _write(tmp_path, system, resolver, questions, split="test", **header):
-    h = {"run_id": f"{system}-{resolver or 'na'}-{split}-x", "system": system, "resolver": resolver,
+def _write(tmp_path, system, resolver, questions, split="test", stamp="x", **header):
+    h = {"run_id": f"{system}-{resolver or 'na'}-{split}-{stamp}", "started_at": stamp, "system": system, "resolver": resolver,
          "split": split, "models": {"answer": "claude-sonnet-5-5", "judge": "claude-opus-5-5"},
          "prompt_versions": {"answer": "answer-v1", "judge": "judge-v1"}, "config_hash": "h",
          "n_questions": len(questions),
@@ -99,3 +99,48 @@ def test_traces_and_judge_section(tmp_path):
     assert "Side-by-side traces" in md and md.count("**Question:**") == 2
     assert "Judge validation" in md and "Agreement 50%" in md and "incomplete" in md
     assert "Judge validation" not in render_report([a, b], judge_check_path=tmp_path / "none.json")
+
+
+def test_paired_difference_sign_and_value(tmp_path):
+    def qs(verdicts):
+        return [_q(f"q{i}", "single_hop", 1.0, True, v) for i, v in enumerate(verdicts)]
+
+    vector = _write(tmp_path, "vector", None, qs(["correct", "partial", "partial", "incorrect"]))
+    graph = _write(tmp_path, "graph", "exact", qs(["correct", "correct", "partial", "partial"]))
+    md = render_report([vector, graph])
+    paired = md.split("graph-exact minus vector")[1]
+    row = next(line for line in paired.splitlines() if line.startswith("| Single-hop |"))
+    assert "+0.25 [" in row.split("|")[4]  # accuracy: mean(.75) - mean(.5), graph minus vector
+    assert "+0.00 [+0.00, +0.00]" in row.split("|")[2]  # recall identical
+
+
+def test_latest_nondegraded_run_per_system_and_split_filter(tmp_path):
+    dev = _write(tmp_path, "vector", None, _questions(False), split="dev", stamp="1")
+    old = _write(tmp_path, "vector", None, _questions(False), stamp="1")
+    new = _write(tmp_path, "vector", None, _questions(False), stamp="2")
+    bad = _write(tmp_path, "vector", None, _questions(False), stamp="3", degraded=True)
+    md = render_report([dev, old, new, bad], split="test")
+    assert "vector-na-test-2" in md and "Ignored runs" in md
+    assert "vector-na-test-1" in md.split("Ignored runs")[1].split("\n")[0]
+    assert "vector-na-test-3" in md.split("Ignored runs")[1].split("\n")[0]  # degraded ignored
+    assert "vector-na-dev-1" not in md
+    with pytest.raises(ValueError, match="no result files"):
+        render_report([dev], split="test")
+
+
+def test_mismatch_banner(tmp_path):
+    a = _write(tmp_path, "vector", None, _questions(False))
+    b = _write(tmp_path, "graph", "exact", _questions(True), config_hash="other",
+               models={"answer": "m2", "judge": "claude-opus-5-5"},
+               graph_meta={"resolver": "exact", "built_at": "t", "config_hash": "older"})
+    md = render_report([a, b])
+    assert "MISMATCH: graph-exact vs vector: models differ" in md
+    assert "MISMATCH: graph-exact vs vector: config_hash differ" in md
+    assert "graph built with config older" in md
+    assert "MISMATCH" not in render_report([a])
+
+
+def test_judge_section_notes_unreported_run(tmp_path):
+    a = _write(tmp_path, "vector", None, _questions(False))
+    (tmp_path / "judge_check.json").write_text(json.dumps({"run_id": "elsewhere", "items": []}))
+    assert "not among the runs reported" in render_report([a])

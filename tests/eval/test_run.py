@@ -33,7 +33,7 @@ def test_graph_eval_fails_fast_when_neo4j_down(tmp_path):
 
     driver = _closed_port_driver()
     try:
-        with pytest.raises(EvalPreconditionError, match="Neo4j"):
+        with pytest.raises(EvalPreconditionError, match="not reachable"):
             run_eval(None, driver, system="graph", split="dev", resolver="exact",
                      results_dir=tmp_path, retriever=boom)
     finally:
@@ -140,7 +140,7 @@ def test_results_file_header_fields(eval_conn, tmp_path):
                 "verdict", "latency_ms", "tokens_in", "tokens_out"} <= set(q)
     assert qs["s1"]["recall"] == 1.0 and qs["s1"]["full_evidence"] is True
     assert qs["m1"]["recall"] == 0.5 and qs["m1"]["full_evidence"] is False
-    assert qs["m1"]["verdict"] == "partial"
+    assert qs["m1"]["verdict"] == "partial" and qs["m1"]["judge_rationale"] == ""
     assert qs["n1"]["recall"] is None and qs["n1"]["verdict"] == "incorrect"  # answered, not abstained
     assert qs["s1"]["tokens_in"] > 0 and qs["s1"]["tokens_out"] > 0
 
@@ -182,7 +182,10 @@ def test_degraded_flag_when_over_ten_percent_error(eval_conn, tmp_path):
     data = json.loads(path.read_text())
     assert data["header"]["degraded"] is True and data["header"]["n_errors"] == 2
     err = next(q for q in data["questions"] if q["question_id"] == "q00")
-    assert err["verdict"] == "error" and err["recall"] is None and "retrieve" in err["error"]
+    # a failed retrieval counts against the system: recall 0, not None
+    assert err["verdict"] == "error" and err["recall"] == 0.0 and err["full_evidence"] is False
+    assert "retrieve" in err["error"]
+    assert not list(tmp_path.glob("*.partial.jsonl"))  # removed once the final file is written
 
 
 @pg
@@ -195,7 +198,68 @@ def test_unimplemented_retriever_aborts_without_results(eval_conn, tmp_path):
     with pytest.raises(NotImplementedError):
         run_eval(eval_conn, None, system="vector", split="dev", resolver=None,
                  results_dir=tmp_path, retriever=stub, answer_llm=FakeLLM(), judge_llm=FakeLLM())
-    assert list(tmp_path.iterdir()) == []
+    assert not list(tmp_path.glob("*.json"))  # no final file...
+    partial = list(tmp_path.glob("*.partial.jsonl"))  # ...but the crash leaves the partial
+    assert len(partial) == 1
+
+
+@pg
+def test_partial_jsonl_written_per_question_and_kept_on_crash(eval_conn, tmp_path):
+    _seed(eval_conn, [(f"q{i}", "single_hop", "dev", ["d1"]) for i in range(3)])
+
+    def crash_on_third(question, budget):
+        if question.endswith("q2"):
+            raise KeyboardInterrupt
+        return retriever(question, budget)
+
+    with pytest.raises(KeyboardInterrupt):
+        run_eval(eval_conn, None, system="vector", split="dev", resolver=None,
+                 results_dir=tmp_path, retriever=crash_on_third, answer_llm=FakeLLM(),
+                 judge_llm=FakeLLM())
+    lines = next(tmp_path.glob("*.partial.jsonl")).read_text().splitlines()
+    assert [json.loads(x)["question_id"] for x in lines] == ["q0", "q1"]
+
+
+@pg
+def test_notimplemented_from_answer_is_a_question_error(eval_conn, tmp_path):
+    _seed(eval_conn, [("q1", "single_hop", "dev", ["d1"])])
+
+    class NotImpl(FakeLLM):
+        def with_structured_output(self, schema, **kwargs):
+            def run(messages, config=None):
+                raise NotImplementedError("nope")
+            return RunnableLambda(run)
+
+    path = run_eval(eval_conn, None, system="vector", split="dev", resolver=None,
+                    results_dir=tmp_path, retriever=retriever, answer_llm=NotImpl(),
+                    judge_llm=FakeLLM())
+    q = json.loads(path.read_text())["questions"][0]
+    assert q["verdict"] == "error" and q["error"].startswith("answer:")
+
+
+@pg
+def test_degraded_test_run_does_not_consume_one_shot(eval_conn, tmp_path):
+    _seed(eval_conn, [("t1", "single_hop", "test", ["d1"])])
+
+    def broken(question, budget):
+        raise RuntimeError("down")
+
+    kw = dict(split="test", resolver=None, results_dir=tmp_path, answer_llm=FakeLLM(),
+              judge_llm=FakeLLM())
+    p = run_eval(eval_conn, None, system="vector", retriever=broken, **kw)
+    assert json.loads(p.read_text())["header"]["degraded"] is True
+    run_eval(eval_conn, None, system="vector", retriever=retriever, **kw)  # allowed
+    with pytest.raises(EvalPreconditionError, match="one-shot"):
+        run_eval(eval_conn, None, system="vector", retriever=retriever, **kw)
+
+
+def test_results_dir_anchored_to_project_not_cwd(tmp_path, monkeypatch):
+    from kgrag.eval import report, run
+
+    monkeypatch.chdir(tmp_path)
+    assert run.RESULTS_DIR.is_absolute() and run.RESULTS_DIR.name == "results"
+    assert run.RESULTS_DIR == report.RESULTS_DIR
+    assert (run.RESULTS_DIR.parent / "config.yaml").exists()
 
 
 @pg

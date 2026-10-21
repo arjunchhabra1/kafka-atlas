@@ -434,19 +434,33 @@ def eval_cmd(
     header = json.loads(path.read_text())["header"]
     typer.echo(f"wrote {path}: {header['n_questions']} questions, {header['n_errors']} errors")
     if header["degraded"]:
-        typer.echo("WARNING: run is degraded (more than 10% of questions errored)", err=True)
+        typer.echo("WARNING: run is degraded (more than 10% of questions errored); it does not "
+                   "consume the test-split one-shot and the report ignores it when a "
+                   "non-degraded run exists", err=True)
 
 
 @app.command()
 def report(
     runs: list[Path] = typer.Argument(..., help="Result files, e.g. results/*.json."),
     trace_examples: int = typer.Option(3, help="Multi-hop disagreement examples to show."),
+    split: str = typer.Option("test", "--split", help="Report runs of this split: test or dev."),
 ) -> None:
     """Print the markdown report for the given results files (judge_check.json is skipped)."""
-    from kgrag.eval.report import render_report
+    import json
 
-    paths = [p for p in runs if p.name != "judge_check.json"]
-    typer.echo(render_report(paths, trace_examples=trace_examples))
+    from kgrag.eval.report import RESULTS_DIR, render_report
+
+    if split not in ("dev", "test"):
+        raise typer.BadParameter("split must be dev or test")
+    paths = [p for p in runs
+             if p.name != "judge_check.json" and not p.name.endswith(".partial.jsonl")]
+    try:  # render fully first so a failure never leaves a truncated redirect target half-written
+        text = render_report(paths, trace_examples=trace_examples, split=split,
+                             judge_check_path=RESULTS_DIR / "judge_check.json")
+    except (ValueError, KeyError, json.JSONDecodeError) as e:
+        typer.echo(f"cannot build report: {e}", err=True)
+        raise typer.Exit(1) from None
+    typer.echo(text)
 
 
 @app.command("judge-check")

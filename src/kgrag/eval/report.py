@@ -3,10 +3,11 @@
 import json
 from pathlib import Path
 
-from kgrag.config import get_settings
+from kgrag.config import CONFIG_PATH, get_settings
 from kgrag.eval.judge import VERDICT_SCORE, agreement_stats
 from kgrag.eval.metrics import bootstrap_ci, paired_diff_ci
 
+RESULTS_DIR = CONFIG_PATH.parent / "results"  # same anchor as eval.run, independent of cwd
 MULTI_HOP = ("inference", "comparison", "temporal")
 SYSTEM_ORDER = ("vector", "graph-exact", "graph-user")
 # (row label, question types)
@@ -27,7 +28,9 @@ def _label(header: dict) -> str:
 def _value(q: dict, metric: str) -> float | None:
     """One question's metric value, or None when it does not apply (null/errored questions)."""
     if metric == "accuracy":
-        return VERDICT_SCORE.get(q["verdict"])  # error -> None, excluded
+        if q["verdict"] == "error" and str(q.get("error", "")).startswith("retrieve"):
+            return 0.0  # a failed retrieval counts against the system
+        return VERDICT_SCORE.get(q["verdict"])  # answer/judge error -> None, excluded
     v = q.get(metric)
     return None if v is None else float(v)
 
@@ -46,20 +49,49 @@ def _diff_cell(a: list[float], b: list[float]) -> str:
     return f"{m:+.2f} [{lo:+.2f}, {hi:+.2f}] (n={len(a)})"
 
 
-def _load(run_paths: list[Path]) -> dict[str, dict]:
-    runs: dict[str, dict] = {}
+def _load(run_paths: list[Path], split: str | None) -> tuple[dict[str, dict], list[str]]:
+    """One run per system: the latest non-degraded run of `split` (latest degraded if none).
+
+    Returns (runs ordered vector, graph-exact, graph-user; ids of the runs ignored).
+    """
+    by_label: dict[str, list[dict]] = {}
     for p in run_paths:
         run = json.loads(Path(p).read_text())
-        label = _label(run["header"])
-        if label in runs:
-            raise ValueError(f"two runs for system {label}: {runs[label]['header']['run_id']} "
-                             f"and {run['header']['run_id']}")
-        runs[label] = run
+        if split is None or run["header"]["split"] == split:
+            by_label.setdefault(_label(run["header"]), []).append(run)
+    if not by_label:
+        raise ValueError(f"no result files for split '{split}'")
+    runs, ignored = {}, []
+    for label, candidates in by_label.items():
+        candidates.sort(key=lambda r: (not r["header"].get("degraded"), r["header"]["started_at"]
+                                       if "started_at" in r["header"] else r["header"]["run_id"]))
+        runs[label] = candidates[-1]
+        ignored += [r["header"]["run_id"] for r in candidates[:-1]]
     splits = {r["header"]["split"] for r in runs.values()}
     if len(splits) > 1:
-        raise ValueError(f"runs come from different splits: {sorted(splits)}")
-    return dict(sorted(runs.items(), key=lambda kv: SYSTEM_ORDER.index(kv[0])
-                       if kv[0] in SYSTEM_ORDER else len(SYSTEM_ORDER)))
+        raise ValueError(f"runs come from different splits: {sorted(splits)}; pass split")
+    ordered = dict(sorted(runs.items(), key=lambda kv: SYSTEM_ORDER.index(kv[0])
+                          if kv[0] in SYSTEM_ORDER else len(SYSTEM_ORDER)))
+    return ordered, sorted(ignored)
+
+
+def _mismatches(runs: dict[str, dict]) -> list[str]:
+    """Differences that make a vector-vs-graph comparison unfair."""
+    out = []
+    base = runs.get("vector")
+    for label, r in runs.items():
+        h = r["header"]
+        meta = h.get("graph_meta")
+        if meta and meta.get("config_hash") != h["config_hash"]:
+            out.append(f"{label}: graph built with config {meta.get('config_hash')} but run "
+                       f"with config {h['config_hash']}")
+        if base is None or label == "vector":
+            continue
+        for field in ("models", "prompt_versions", "config_hash"):
+            if base["header"].get(field) != h.get(field):
+                out.append(f"{label} vs vector: {field} differ "
+                           f"({base['header'].get(field)} vs {h.get(field)})")
+    return out
 
 
 def _table(title: str, runs: dict[str, dict], metric: str) -> list[str]:
@@ -117,7 +149,8 @@ def _cost_latency(runs: dict[str, dict]) -> list[str]:
     pricing = get_settings().pricing
     out = ["## Cost and latency per question", "",
            "Token counts are tiktoken estimates of the answer call (sources + question in, answer "
-           "out); judge calls are excluded. Latency covers retrieval and answering.", "",
+           "out). Cost is answer-call cost only (excludes judge, embeddings, any LLM calls inside "
+           "the graph retriever). Latency covers retrieval and answering.", "",
            "| System | Latency ms (mean) | Tokens in | Tokens out | Est. cost USD |",
            "|---|---|---|---|---|"]
     for label, run in runs.items():
@@ -158,10 +191,14 @@ def _traces(runs: dict[str, dict], n: int) -> list[str]:
             out.append(f"| {label} | {q['verdict']} | {recall} | "
                        f"{', '.join(q['retrieved_doc_ids'][:8])} | {text} |")
         out.append("")
+        for label, d in by_sys.items():
+            trace = json.dumps(d[qid].get("retrieval_trace") or {}, default=str)
+            out.append(f"- {label} retrieval trace: `{trace[:300]}{'...' if len(trace) > 300 else ''}`")
+        out.append("")
     return out
 
 
-def _judge_section(path: Path) -> list[str]:
+def _judge_section(path: Path, run_ids: set[str]) -> list[str]:
     if not path.exists():
         return []
     state = json.loads(path.read_text())
@@ -174,21 +211,32 @@ def _judge_section(path: Path) -> list[str]:
         out.append(f"Agreement {s['agreement']:.0%}; Cohen's kappa {kappa}.")
     if s["labelled"] < s["total"]:
         out.append("**The check is incomplete.**")
+    if state["run_id"] not in run_ids:
+        out.append("**Note: the checked run is not among the runs reported above.**")
     return out + [""]
 
 
 def render_report(
-    run_paths: list[Path], trace_examples: int = 3, judge_check_path: Path | None = None
+    run_paths: list[Path], trace_examples: int = 3, judge_check_path: Path | None = None,
+    split: str | None = None,
 ) -> str:
-    """Markdown report. Paired differences use only questions present in both runs."""
-    runs = _load([Path(p) for p in run_paths])
-    if not runs:
+    """Markdown report. Paired differences use only questions present in both runs.
+
+    With several runs per system, the latest non-degraded one of `split` is used and the
+    others are listed as ignored. Raises ValueError for unusable input.
+    """
+    if not run_paths:
         raise ValueError("no result files given")
+    runs, ignored = _load([Path(p) for p in run_paths], split)
     first = next(iter(runs.values()))["header"]
     out = ["# Kafka Atlas evaluation report", "",
            f"Split: **{first['split']}**"
            + ("" if first["split"] == "test" else " (not the headline split; headline numbers "
               "come only from the test split)"), ""]
+    if ignored:
+        out += [f"Ignored runs (superseded or degraded): {', '.join(ignored)}", ""]
+    for m in _mismatches(runs):
+        out += [f"> **MISMATCH: {m}**", ""]
     degraded = [(label, r["header"]) for label, r in runs.items() if r["header"].get("degraded")]
     for label, h in degraded:
         out += [f"> **DEGRADED RUN: {label}** - {h['n_errors']} of {h['n_questions']} questions "
@@ -203,7 +251,8 @@ def render_report(
                    f"{', '.join(f'{k}={v}' for k, v in h['prompt_versions'].items())} | "
                    f"{h['config_hash']} |")
     out += ["", "Errored questions are excluded from answer accuracy (the n in each cell). "
-            "Cells are `mean [95% bootstrap CI] (n)`.", "", "## Results", ""]
+            "Cells are `mean [95% bootstrap CI] (n)`. *Indicative*: the per-type groups have few "
+            "questions each, so their intervals are wide.", "", "## Results", ""]
     for metric, title in METRICS:
         out += _table(title, runs, metric)
     out += ["## Paired differences vs the vector baseline", "",
@@ -212,5 +261,5 @@ def render_report(
     out += _cost_latency(runs)
     out += _traces(runs, trace_examples)
     check = judge_check_path or Path(next(iter(run_paths))).parent / "judge_check.json"
-    out += _judge_section(Path(check))
+    out += _judge_section(Path(check), {r['header']['run_id'] for r in runs.values()})
     return "\n".join(out).rstrip() + "\n"

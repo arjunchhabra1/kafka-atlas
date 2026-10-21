@@ -13,8 +13,8 @@ import psycopg
 
 from kgrag.answer.chain import Answer, answer
 from kgrag.answer.prompt import ANSWER_PROMPT_VERSION, SYSTEM_PROMPT
-from kgrag.config import config_hash, get_settings
-from kgrag.eval.judge import JUDGE_PROMPT_VERSION, judge
+from kgrag.config import CONFIG_PATH, config_hash, get_settings
+from kgrag.eval.judge import JUDGE_PROMPT_VERSION, grade
 from kgrag.eval.metrics import full_evidence, source_recall
 from kgrag.graph.build import read_graph_meta
 from kgrag.observability import tag_current_trace, traced
@@ -22,7 +22,7 @@ from kgrag.retrieve.types import RetrievalResult
 from kgrag.store.repo import QuestionRow
 from kgrag.tokens import count_tokens
 
-RESULTS_DIR = Path("results")
+RESULTS_DIR = CONFIG_PATH.parent / "results"  # anchored to the project, never the cwd
 DEGRADED_ERROR_RATE = 0.10  # a run with more than this fraction of errored questions is degraded
 log = logging.getLogger(__name__)
 
@@ -51,11 +51,13 @@ def _check_one_shot(results_dir: Path, system: str, resolver: str | None) -> Non
             header = json.loads(path.read_text()).get("header", {})
         except (json.JSONDecodeError, AttributeError):
             continue
+        if header.get("degraded"):
+            continue  # a degraded run does not consume the one-shot
         if (header.get("split") == "test" and header.get("system") == system
                 and header.get("resolver") == resolver):
             raise EvalPreconditionError(
                 f"a test-split run for ({system}, {resolver}) already exists ({path.name}); "
-                "the test split is one-shot. Pass force to run it again."
+                "the test split is one-shot (degraded runs do not count). Pass --force to run it again."
             )
 
 
@@ -104,6 +106,13 @@ def _rollback(conn: psycopg.Connection) -> None:
         log.warning("rollback failed", exc_info=True)
 
 
+def _record_error(rec: dict, conn: psycopg.Connection, q: QuestionRow, stage: str, e: Any) -> None:
+    log.warning("question %s failed at %s: %s", q.id, stage, e)
+    rec["verdict"] = "error"
+    rec["error"] = f"{stage}: {type(e).__name__}: {e}"
+    _rollback(conn)
+
+
 @traced("eval.question")
 def _eval_question(
     q: QuestionRow, *, system: str, run_id: str, retrieve: Retriever, conn: psycopg.Connection,
@@ -113,13 +122,21 @@ def _eval_question(
     rec: dict[str, Any] = {
         "question_id": q.id, "type": q.type, "question": q.question, "gold_answer": q.answer,
         "gold_doc_ids": q.gold_doc_ids, "retrieved_doc_ids": [], "recall": None,
-        "full_evidence": None, "answer": None, "verdict": "error", "latency_ms": None,
+        "full_evidence": None, "answer": None, "verdict": "error", "judge_rationale": None, "latency_ms": None,
         "tokens_in": None, "tokens_out": None, "error": None, "retrieval_trace": {},
     }
     start = time.perf_counter()
     stage = "retrieve"
     try:
-        result = retrieve(q.question, budget)
+        try:
+            result = retrieve(q.question, budget)
+        except NotImplementedError:
+            raise  # an unimplemented retriever is not a per-question failure
+        except Exception:
+            # A failed retrieval counts against the system: nothing retrieved, so recall 0.
+            rec["recall"] = source_recall([], q.gold_doc_ids)
+            rec["full_evidence"] = full_evidence([], q.gold_doc_ids)
+            raise
         rec["retrieved_doc_ids"] = [e.doc_id for e in result.evidence]
         rec["retrieval_trace"] = _json_safe(result.trace)
         rec["recall"] = source_recall(rec["retrieved_doc_ids"], q.gold_doc_ids)
@@ -133,14 +150,14 @@ def _eval_question(
                             + sum(count_tokens(e.text) for e in result.evidence))
         rec["tokens_out"] = count_tokens(ans.text)
         stage = "judge"
-        rec["verdict"] = judge(q.question, q.answer, ans, judge_llm, is_null=q.type == "null")
-    except NotImplementedError:
-        raise  # an unimplemented retriever is not a per-question failure
+        verdict = grade(q.question, q.answer, ans, judge_llm, is_null=q.type == "null")
+        rec["verdict"], rec["judge_rationale"] = verdict.verdict, verdict.rationale
+    except NotImplementedError as e:
+        if stage == "retrieve":
+            raise
+        _record_error(rec, conn, q, stage, e)
     except Exception as e:  # noqa: BLE001 - one bad question must not sink the run
-        log.warning("question %s failed at %s: %s", q.id, stage, e)
-        rec["verdict"] = "error"
-        rec["error"] = f"{stage}: {type(e).__name__}: {e}"
-        _rollback(conn)
+        _record_error(rec, conn, q, stage, e)
     if rec["latency_ms"] is None:
         rec["latency_ms"] = round((time.perf_counter() - start) * 1000, 1)
     return rec
@@ -186,14 +203,18 @@ def run_eval(
             with _default_retriever(system, conn, driver) as r:
                 yield r
 
-    with retrievers() as retrieve:
-        records = [
-            _eval_question(
+    results_dir.mkdir(parents=True, exist_ok=True)
+    partial = results_dir / f"{run_id}.partial.jsonl"
+    records = []
+    with retrievers() as retrieve, partial.open("w") as sink:
+        for q in questions:
+            rec = _eval_question(
                 q, system=system, run_id=run_id, retrieve=retrieve, conn=conn,
                 budget=settings.budget_tokens, answer_llm=answer_llm, judge_llm=judge_llm,
             )
-            for q in questions
-        ]
+            records.append(rec)
+            sink.write(json.dumps(rec) + "\n")
+            sink.flush()  # a crash leaves everything done so far for inspection
 
     n_errors = sum(r["verdict"] == "error" for r in records)
     header = {
@@ -210,8 +231,8 @@ def run_eval(
             "resolver": meta.resolver, "built_at": meta.built_at.isoformat(),
             "config_hash": meta.config_hash},
     }
-    results_dir.mkdir(parents=True, exist_ok=True)
     path = results_dir / f"{run_id}.json"
     path.write_text(json.dumps({"header": header, "questions": records}, indent=2))
+    partial.unlink()
     return path
 

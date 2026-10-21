@@ -23,6 +23,15 @@ def test_report_cli_skips_judge_check_file(tmp_path):
     paths = [_run(tmp_path, "vector", None), _run(tmp_path, "graph", "exact")]
     check = tmp_path / "judge_check.json"
     check.write_text(json.dumps({"run_id": "r", "items": []}))
-    result = CliRunner().invoke(app, ["report", *map(str, paths), str(check)])
+    result = CliRunner().invoke(app, ["report", "--split", "dev", *map(str, paths), str(check)])
     assert result.exit_code == 0, result.output
     assert "Kafka Atlas evaluation report" in result.output
+
+
+def test_report_cli_errors_cleanly_without_matching_split(tmp_path):
+    paths = [_run(tmp_path, "vector", None)]  # a dev run; default split is test
+    result = CliRunner().invoke(app, ["report", *map(str, paths)])
+    assert result.exit_code == 1 and "cannot build report" in result.output
+    assert "Traceback" not in result.output
+    ok = CliRunner().invoke(app, ["report", "--split", "dev", *map(str, paths)])
+    assert ok.exit_code == 0, ok.output

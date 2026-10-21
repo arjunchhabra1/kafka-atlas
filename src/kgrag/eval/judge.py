@@ -39,21 +39,18 @@ class Verdict(BaseModel):
     rationale: str = ""
 
 
-def judge(
+def grade(
     question: str,
     gold_answer: str,
     answer: Answer,
     llm: BaseChatModel | None = None,
     *,
     is_null: bool = False,
-) -> Label:
-    """Grade `answer` against `gold_answer`.
-
-    Null questions (no answer exists in the corpus) are scored by rule, with no LLM call:
-    correct iff the system abstained.
-    """
+) -> Verdict:
+    """Verdict with rationale. Null questions are scored by rule (no LLM): correct iff abstained."""
     if is_null:
-        return "correct" if answer.insufficient else "incorrect"
+        return Verdict(verdict="correct" if answer.insufficient else "incorrect",
+                       rationale="rule: null question scored by abstention")
     if llm is None:
         from langchain_anthropic import ChatAnthropic
 
@@ -66,8 +63,19 @@ def judge(
             f"System answer: {answer.text}"
         ),
     ]
-    parsed = chain.invoke(messages, config={"callbacks": langchain_callbacks()})
-    return parsed.verdict
+    return chain.invoke(messages, config={"callbacks": langchain_callbacks()})
+
+
+def judge(
+    question: str,
+    gold_answer: str,
+    answer: Answer,
+    llm: BaseChatModel | None = None,
+    *,
+    is_null: bool = False,
+) -> Label:
+    """Grade `answer` against `gold_answer`; see `grade` for the rationale-bearing form."""
+    return grade(question, gold_answer, answer, llm, is_null=is_null).verdict
 
 
 # ---- judge validation: human labels vs judge labels -------------------------------------
