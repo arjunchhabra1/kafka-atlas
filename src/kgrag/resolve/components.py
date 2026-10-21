@@ -6,6 +6,8 @@ from collections import Counter, defaultdict
 from kgrag.extract.schema import Mention
 from kgrag.resolve.names import fold
 
+# "kafka-" counts as a prefix too: "kafka-streams" is the Kafka Streams artifact. The cost is
+# that CLI/artifact names fold into their concept ("kafka-storage" == "storage").
 _PREFIX_RE = re.compile(r"^(the|apache|kafka)[\s_-]+", re.IGNORECASE)
 _SOURCE_EXT_RE = re.compile(r"\.(java|scala|kt|py)$", re.IGNORECASE)
 _QUALIFIED_RE = re.compile(r"^[a-z_][\w]*(\.[a-z_][\w]*)+\.([A-Z]\w*)$")  # org.example.Foo
@@ -35,6 +37,7 @@ def component_key(surface: str) -> str:
     """
     text = _strip_decorations(surface)
     key = re.sub(r"[\s_-]+", "", fold(text))
+    # Plural "s" only on plain words ("brokers"); class names like "Serdes" are spelled exactly.
     if not _CAMEL_RE.search(text) and len(key) > 3 and key.endswith("s") and not key.endswith("ss"):
         key = key[:-1]
     return key

@@ -8,8 +8,8 @@ from kgrag.resolve.names import (
     first_names_compatible,
     fold,
     full_key,
-    is_greeting,
     is_relay_name,
+    name_role,
     is_surname_typo,
     parse_name,
 )
@@ -86,19 +86,73 @@ def test_first_names_compatible_is_asymmetric():
 
 
 @pytest.mark.parametrize(
-    ("context", "expected"),
+    ("context", "surface"),
     [
-        ("Hi Jane,", True),
-        ("hello Jane, thanks", True),
-        ("Hey Jane", True),
-        ("Dear Jane,", True),
-        ("Thanks, Jane", False),
-        ("Jane", False),
-        ("as Jane said, hi", False),
+        ("Jane", "Jane"),
+        ("Thanks,\nJane", "Jane"),
+        ("Thanks, Jane", "Jane"),
+        ("Thanks!  Jane", "Jane"),
+        ("Best, Jane", "Jane"),
+        ("Kind regards,\nJane", "Jane"),
+        ("Thanks again, Jane", "Jane"),
+        ("Thanks and best regards, Jane", "Jane"),
+        ("TIA Jane", "Jane"),
+        ("HTH Jane", "Jane"),
+        ("-- Jane", "Jane"),
+        ("-Jane", "-Jane"),
+        ("Cheers\nJane D", "Jane D"),
+        ("Thanks so much! Jane", "Jane"),  # a closing sentence, then the name
+        ("Thanks, everyone. Jane.", "Jane"),
+        ("Jane\non behalf of the PMC", "Jane"),
+        ("I'm Jane, a developer at Example", "Jane"),  # self-introduction
+        ("Hope this helps, Jane", "Jane"),  # last words of the message
+        ("Thanks a lot!   -Jane", "Jane"),
+        ("Best, Jane & Bo", "Jane"),  # co-signed
+        ("Jane and the Widget team", "Jane"),
     ],
 )
-def test_is_greeting(context, expected):
-    assert is_greeting(context) is expected
+def test_name_role_self(context, surface):
+    assert name_role(context, surface) == "self"
+
+
+def test_name_role_self_allows_the_senders_surname_after_the_name():
+    assert name_role("Best,\nJane Doe", "Jane", surnames={"doe"}) == "self"
+    assert name_role("Best,\nJane Doe", "Jane") == "other"
+
+
+@pytest.mark.parametrize(
+    ("context", "surface"),
+    [
+        ("Thanks, Jane. This is a nice addition!", "Jane"),  # thanks + more sentence
+        ("Thank you Jane for the KIP", "Jane"),
+        ("based on Jane's comment", "Jane"),  # possessive
+        ("@Jane: can you prepare a KIP?", "Jane"),  # @mention
+        ("@Jane", "Jane"),
+        ("Jane: can you take a look?", "Jane"),  # vocative
+        ("Jane, could you check?", "Jane"),
+        ("as Jane said, we should wait", "Jane"),  # as X said
+        ("as suggested by Jane", "Jane"),  # name at the end, but not after a closing word
+        ("Thanks Jane again", "Jane"),
+        ("thanks to Jane", "Jane"),
+        ("4 binding votes (Bo, Jane and Cy)", "Jane"),
+    ],
+)
+def test_name_role_other(context, surface):
+    assert name_role(context, surface) == "other"
+
+
+@pytest.mark.parametrize("context", ["Hi Jane,", "hello Jane, thanks", "Dear Jane", "Welcome Jane"])
+def test_name_role_greeting(context):
+    assert name_role(context, "Jane") == "greeting"
+
+
+def test_name_role_absent_when_the_sentence_does_not_contain_the_name():
+    assert name_role("I can update the KIP.", "Jane") == "absent"
+
+
+def test_parse_name_lists_of_people_are_not_a_full_name():
+    assert not parse_name("Ann, Bo and Cy").is_full
+    assert not parse_name("Ann Bo Cy Dee Eve").is_full
 
 
 def test_address_local_part():

@@ -34,11 +34,15 @@ People (people.py, names.py), in two steps:
    surname it misspells by a single letter ("Jane Doee").
 2. Attach every mention. Header, Jira and full-name mentions go straight to their
    identity. A first-name-only mention ("Chris", "David A") is resolved from its own
-   email: a sign-off matching the sender -> the sender; a greeting ("Hi Chris") never
-   means the sender; otherwise the one fitting person named in full in the same email,
-   else the one fitting list participant (header sender or Jira user) in the whole corpus
-   (or, if no participant fits, the one fitting person ever named in full). Anything still ambiguous stays a
-   singleton: a missed link costs recall, a wrong merge corrupts the graph.
+   email. If the writer is naming themselves -- a sign-off ("Thanks,\nChris", "-- Chris")
+   or a self-introduction -- and the sender fits, it is the sender. Any other use ("Hi
+   Chris", "Chris's point", "@Chris: can you...") never means the sender; it goes to the
+   one fitting person named in full in the same email, else the one fitting list
+   participant (header sender or Jira user) in the whole corpus (or, if no participant
+   fits, the one fitting person ever named in full). If the sender shares the name and
+   the use is not a greeting, only same-email evidence may decide. Anything still
+   ambiguous stays a singleton: a missed link costs recall, a wrong merge corrupts the
+   graph.
 
 Canonical names prefer full over abbreviated spellings, then header > Jira > text, then
 the most used spelling. Every loop runs over sorted data, so the output never depends on

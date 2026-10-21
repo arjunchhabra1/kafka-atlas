@@ -2,6 +2,8 @@
 
 import random
 
+import pytest
+
 from kgrag.extract.schema import AnchorHints, Mention
 from kgrag.resolve.people import resolve_people
 
@@ -164,3 +166,56 @@ def test_corpus_fallback_uses_text_only_person_when_no_participant_fits():
     ms = [header("a2", "Eli Moss", "em@x.example"), llm("a2", 1, "Ines Park", "the paper by Ines Park"),
           header("a3", "Eli Moss", "em@x.example"), llm("a3", 1, "Ines", "as Ines wrote")]
     assert entity_of(ms, "a3:m1")[0] == {"a2:m1", "a3:m1"}
+
+
+# --- sender vs. addressee: a different Jane sends, the mention means the other Jane ------
+
+def _two_janes(context):
+    """Jane Brook sends; Jane Stone is the only other Jane (a list participant)."""
+    return [header("a1", "Jane Brook", "jb@x.example"), header("a2", "Jane Stone", "js@x.example"),
+            llm("a1", 1, "Jane", context)]
+
+
+@pytest.mark.parametrize("context", [
+    "Thanks, Jane. This is a nice addition!",
+    "based on Jane's comment",
+    "@Jane: can you prepare a KIP?",
+    "Jane: could you take a look?",
+    "as Jane said, we should wait",
+])
+def test_addressing_never_resolves_to_sender(context):
+    """Never the sender; with no other Jane named in the email it stays a singleton."""
+    ms = _two_janes(context)
+    assert entity_of(ms, "a1:m1")[0] == {"a1:m1"}
+    ms.append(llm("a1", 2, "Jane Stone", "On Monday Jane Stone wrote:"))
+    assert entity_of(ms, "a1:m1")[0] == {"a2:h0", "a1:m1", "a1:m2"}
+
+
+def test_greeting_from_a_namesake_goes_to_the_other_participant():
+    assert entity_of(_two_janes("Hi Jane,"), "a1:m1")[0] == {"a2:h0", "a1:m1"}
+
+
+@pytest.mark.parametrize("context", ["Jane", "Thanks,\nJane", "Best, Jane", "-- Jane", "Thanks! Jane",
+                                     "Best,\nJane Brook", "I can update the KIP."])
+def test_true_sign_off_resolves_to_sender(context):
+    assert entity_of(_two_janes(context), "a1:m1")[0] == {"a1:h0", "a1:m1"}
+
+
+def test_relay_first_name_senders_are_not_shared_across_emails():
+    ms = [header("a1", "Ashok via dev", "dev@list.example"),
+          header("a2", "Ashok via dev", "dev@list.example")]
+    assert len(clusters(ms)) == 2
+
+
+def test_abbreviated_header_with_two_fitting_full_names_stays_apart():
+    ms = [header("a1", "Rana K.", "rk@x.example"), llm("a2", 1, "Rana Karimi", "+1 Rana Karimi"),
+          llm("a3", 1, "Rana Kahn", "+1 Rana Kahn")]
+    assert entity_of(ms, "a1:h0")[0] == {"a1:h0"}
+
+
+def test_sender_namesake_mentioned_but_not_signing_needs_local_evidence():
+    """A Jane writing "Jane" (not a sign-off) may mean herself: the corpus fallback is off."""
+    ms = _two_janes("The vote passed with 3 binding votes (Jane, Bo, Cy).")
+    assert entity_of(ms, "a1:m1")[0] == {"a1:m1"}
+    ms.append(llm("a1", 2, "Jane Stone", "On Monday Jane Stone wrote:"))
+    assert entity_of(ms, "a1:m1")[0] == {"a2:h0", "a1:m1", "a1:m2"}

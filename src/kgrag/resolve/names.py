@@ -5,6 +5,7 @@ Everything here is a small pure function so it can be unit-tested on its own.
 
 import re
 import unicodedata
+from collections.abc import Collection
 from dataclasses import dataclass
 
 # Generic English diminutives -> formal first name. Deliberately small: each entry is a
@@ -34,7 +35,14 @@ FORMAL_FIRST_NAME: dict[str, str] = {
 # Words that can precede a name in an extracted surface ("Hi Chris", "Other Chris").
 _LEADING_FILLERS = {"hi", "hello", "hey", "dear", "thanks", "thank", "other", "mr", "mrs", "ms", "dr"}
 _NAME_SUFFIXES = {"jr", "sr", "ii", "iii", "iv", "phd"}
-_GREETING_RE = re.compile(r"^\W*(hi|hello|hey|dear|greetings|good (morning|afternoon|evening))\b")
+# A name right after one of these words is addressed or talked about, never a sign-off.
+_GREETING_WORDS = {"hi", "hello", "hey", "dear", "welcome", "congrats", "congratulations"}
+_ADDRESSING_WORDS = _GREETING_WORDS | {"ping", "cc", "ask", "asked", "by", "to", "from", "with",
+                                       "for", "of", "about", "as", "and", "or"}
+_CLOSING_WORDS = {"thanks", "thx", "cheers", "best", "regards", "sincerely"}
+_CO_SIGNERS_RE = re.compile(r"^\s*(&|and)(\s+[\w']+){1,3}\W*$")  # "Jane & Bo", "Jane and the X team"
+_SELF_INTRO_RE = re.compile(r"\b(i'm|i am|this is|my name is)\s*$")
+_NOT_NAME_TOKENS = {"and", "or"}
 _RELAY_RE = re.compile(r"\s+via\s+\S+\s*$", re.IGNORECASE)
 EMAIL_RE = re.compile(r"[\w.+-]+@[\w-]+(\.[\w-]+)+")
 
@@ -86,8 +94,9 @@ class PersonName:
 
     @property
     def is_full(self) -> bool:
-        """A first name plus a real (not abbreviated) surname."""
-        return self.last is not None and not self.last_is_initial
+        """A first name plus a real (not abbreviated) surname, and not a list of people."""
+        return (self.last is not None and not self.last_is_initial and len(self.tokens) <= 4
+                and not _NOT_NAME_TOKENS & set(self.tokens))
 
 
 def parse_name(raw: str) -> PersonName:
@@ -133,9 +142,38 @@ def first_names_compatible(mentioned: str, known: str) -> bool:
     return formal(mentioned) == formal(known)
 
 
-def is_greeting(context: str) -> bool:
-    """True if the sentence opens with a salutation ("Hi Jane,"), i.e. it addresses someone."""
-    return bool(_GREETING_RE.match(fold(context)))
+def name_role(context: str, surface: str, surnames: Collection[str] = ()) -> str:
+    """How a first name is used in its sentence: "self", "greeting", "other" or "absent".
+
+    "self": the writer naming themselves. Either a self-introduction ("I'm Jane, ...") or
+    the name closes the sentence -- nothing after it except one of `surnames`, co-signers
+    ("Jane & Bo") or "on behalf of ..." -- as in "Thanks,\nJane", "Hope this helps, Jane",
+    "-- Jane".
+    "greeting": "Hi Jane", "Dear Jane" -- someone other than the writer, for certain.
+    "other": the name is addressed or talked about: more text follows it ("Thanks, Jane.
+    Nice work", "Jane's comment", "Jane: can you..."), it is an "@Jane" handle, or it follows
+    a greeting or a preposition ("Hi Jane", "as suggested by Jane", "Bo and Jane").
+    "absent": the extractor's sentence does not contain the name, so it tells us nothing.
+    """
+    name = fold(" ".join(surface.split())).strip("-~ ")
+    text = fold(context)
+    at = text.rfind(name) if name else -1
+    if at < 0:
+        return "absent"
+    before, after = text[:at], text[at + len(name):]
+    if before.rstrip().endswith("@"):
+        return "other"
+    if _SELF_INTRO_RE.search(before):
+        return "self"
+    rest = re.findall(r"[\w']+", after)
+    previous_word = (re.findall(r"[\w']+", before) or [""])[-1]
+    if previous_word in _GREETING_WORDS:
+        return "greeting"
+    starts_line = not before.rsplit("\n", 1)[-1].strip(" ,-~")
+    co_signed = bool(_CO_SIGNERS_RE.match(after)) and (starts_line or previous_word in _CLOSING_WORDS)
+    closes_sentence = (not rest or (len(rest) == 1 and rest[0] in surnames)
+                       or rest[:3] == ["on", "behalf", "of"] or co_signed)
+    return "self" if closes_sentence and previous_word not in _ADDRESSING_WORDS else "other"
 
 
 def address_local_part(address: str) -> str | None:
