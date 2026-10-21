@@ -84,3 +84,10 @@ def _refuse_dev_defaults(s: Settings) -> None:
 def config_hash(s: Settings) -> str:
     payload = json.dumps(s.model_dump(mode="json"), sort_keys=True)
     return hashlib.sha256(payload.encode()).hexdigest()[:12]
+
+
+def load_env(path: Path | None = None) -> None:
+    """Load the project-root `.env` into os.environ without overriding exported variables."""
+    from dotenv import load_dotenv
+
+    load_dotenv(path if path is not None else CONFIG_PATH.parent / ".env", override=False)

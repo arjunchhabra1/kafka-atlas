@@ -39,3 +39,18 @@ def test_env_overrides_yaml(monkeypatch):
     s = Settings()
     assert s.budget_tokens == 999
     assert s.models.judge == "other-judge"
+
+
+def test_load_env_reads_file_without_overriding(tmp_path, monkeypatch):
+    from kgrag.config import load_env
+
+    env = tmp_path / ".env"
+    env.write_text("KGRAG_TEST_DUMMY_KEY=from-file\nKGRAG_TEST_EXPORTED=from-file\n")
+    monkeypatch.delenv("KGRAG_TEST_DUMMY_KEY", raising=False)
+    monkeypatch.setenv("KGRAG_TEST_EXPORTED", "exported")
+    load_env(env)
+    import os
+
+    assert os.environ["KGRAG_TEST_DUMMY_KEY"] == "from-file"
+    assert os.environ["KGRAG_TEST_EXPORTED"] == "exported"
+    monkeypatch.delenv("KGRAG_TEST_DUMMY_KEY")

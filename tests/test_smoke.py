@@ -5,7 +5,7 @@ answer/judge chat models. It checks that the stages are wired together, not retr
 """
 
 import json
-from pathlib import Path
+import time
 
 import pytest
 from langchain_core.runnables import RunnableLambda
@@ -36,7 +36,7 @@ pytestmark = pytest.mark.integration
 
 
 class FakeLLM:
-    """Answers with the first retrieved doc id cited; judges every answer correct."""
+    """Answers every question with no citations; judges every answer correct."""
 
     def with_structured_output(self, schema, **kwargs):
         def run(messages, config=None):
@@ -48,6 +48,7 @@ class FakeLLM:
 
 
 def test_pipeline_end_to_end(pg_conn, neo4j_driver, tmp_path):
+    started = time.perf_counter()
     set_embeddings_for_tests(RecordedEmbeddings(FIXTURES / "recorded_embeddings.json")
                              if (FIXTURES / "recorded_embeddings.json").exists()
                              else HashEmbeddings(dim=64))
@@ -102,3 +103,4 @@ def test_pipeline_end_to_end(pg_conn, neo4j_driver, tmp_path):
             assert "graph-exact minus vector" in report and "graph-user minus vector" in report
     finally:
         set_embeddings_for_tests(None)
+    assert time.perf_counter() - started < 60, "smoke test must stay under 60 s"

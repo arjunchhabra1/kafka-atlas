@@ -7,7 +7,7 @@ The corpus is three years (2023-2025) of `dev@kafka.apache.org` plus its Jira ac
 - **Vector RAG baseline:** LangChain + pgvector, nearest-neighbour search over email and Jira chunks.
 - **Graph RAG:** an LLM-extracted knowledge graph in Neo4j, queried through entity linking and bounded multi-hop traversal, with every edge pointing back to the chunks that justify it.
 
-**Stack:** Python 3.12, Claude (Haiku / Sonnet), Voyage embeddings, Postgres + pgvector, Neo4j, LangChain, FastAPI, Docker, GCP (Cloud Run, Cloud SQL), Langfuse, GitHub Actions.
+**Stack:** Python 3.12, Claude Sonnet 5.5 (extraction, question drafting, answering) and Claude Opus 5.5 (judge), Voyage embeddings, Postgres + pgvector, Neo4j, LangChain, FastAPI, Docker, GCP (Cloud Run, Cloud SQL), Langfuse, GitHub Actions.
 
 ## Architecture
 
@@ -37,7 +37,8 @@ Requires Docker, [uv](https://docs.astral.sh/uv/), and an Anthropic API key (plu
 
 ```bash
 uv sync
-cp .env.example .env                       # add ANTHROPIC_API_KEY and VOYAGE_API_KEY
+cp .env.example .env                       # add ANTHROPIC_API_KEY and VOYAGE_API_KEY (loaded automatically by kgrag)
+# set models.embed in config.yaml to a Voyage model (it ships as a placeholder; see docs/DEPLOY.md)
 docker compose up -d                       # Postgres (pgvector) and Neo4j
 
 uv run kgrag ingest --from 2023-01 --to 2025-12
@@ -45,8 +46,16 @@ uv run kgrag extract --limit 200           # prints a cost estimate and asks fir
 uv run kgrag resolve --resolver exact      # baseline resolver
 uv run kgrag resolve --resolver user       # the entity resolver
 uv run kgrag build --resolver user         # load the graph into Neo4j
-uv run kgrag index                         # embed chunks and node names into pgvector
+uv run kgrag index                         # embed chunks and node names into pgvector (needs Voyage key; costs money)
 
+# Question set. Draft steps call the Anthropic API (cost guard asks first); review is human time.
+uv run kgrag questions draft --pilot       # API cost: 6 questions per type, to check quality
+uv run kgrag questions review              # HUMAN REVIEW: keep / edit / drop each draft
+uv run kgrag questions draft --counts single_hop=100,inference=55,null=40   # API cost; add other types as needed
+uv run kgrag questions review              # HUMAN REVIEW again for the full set
+uv run kgrag questions split               # 20% dev / 80% test, once
+
+# Evaluation (API cost: answer and judge models per question)
 uv run kgrag eval --system vector --split dev
 uv run kgrag eval --system graph --resolver user --split dev
 uv run kgrag report results/*.json --split dev
@@ -72,7 +81,7 @@ The graph holds one resolver at a time: to evaluate `--resolver exact`, rebuild 
 
 **Shared answer chain.** Both systems feed the same chain: one model, one prompt, the same 4,000-token evidence budget, structured output with cited document IDs and an explicit "insufficient evidence" option.
 
-**Evaluation.** About 300 human-reviewed questions (single-hop, inference, comparison, temporal, and null questions that should be refused), built with the MultiHop-RAG recipe: evidence is sampled from thread and ID links using headers and regexes only, never from the graph, so the question set does not favour either system. Questions are drafted by an LLM, filtered to single-source verifiability, then reviewed by a human. They are split 20% dev / 80% test; retriever tuning uses only dev, and each (system, resolver) pair may run on the test split once (`--force` is required to repeat it). Metrics are source recall, full-evidence rate, judged answer accuracy, cost and latency, with 95% bootstrap confidence intervals and paired bootstrap differences against the vector baseline over the questions both systems answered. The LLM judge is validated against about 50 human labels (`kgrag judge-check`), and runs where more than 10% of questions error are flagged degraded.
+**Evaluation (design; the full question set and runs are pending).** The evaluation is designed around about 300 human-reviewed questions (single-hop, inference, comparison, temporal, and null questions that should be refused), built with the MultiHop-RAG recipe: evidence is sampled from thread and ID links using headers and regexes only, never from the graph, so the question set does not favour either system. Questions are drafted by an LLM, filtered to single-source verifiability, then reviewed by a human. They will be split 20% dev / 80% test; retriever tuning is to use only dev, and each (system, resolver) pair may run on the test split once (`--force` is required to repeat it). Metrics are source recall, full-evidence rate, judged answer accuracy, cost and latency, with 95% bootstrap confidence intervals and paired bootstrap differences against the vector baseline over the questions both systems answered. The LLM judge is to be validated against about 50 human labels (`kgrag judge-check`), and runs where more than 10% of questions error are flagged degraded.
 
 ## Data so far
 
@@ -89,7 +98,7 @@ Counts from the local databases.
 | Node counts | 4,694 Person, 751 Component, 700 KIP, 6,088 JiraTicket, 296 Release, 11,847 Email |
 | Person entities, exact resolver vs `user` resolver | 1,758 vs 4,694 |
 
-The exact-match resolver merges every mention with the same surface form, so common first names collapse unrelated people into one node; the `user` resolver keeps them apart.
+The exact-match resolver merges every mention with the same surface form, so common first names collapse unrelated people into one node. The `user` resolver yields more Person entities because it leaves ambiguous first names unresolved by design instead of guessing, and keeps different people who share a first name apart; the extra entities are mostly those unmerged singletons.
 
 ## Results
 
@@ -100,14 +109,14 @@ The exact-match resolver merges every mention with the same surface form, so com
 
 ## Deployment
 
-The API (`kgrag serve`) runs on Cloud Run, with Cloud SQL Postgres (pgvector) for documents and embeddings, AuraDB for the graph, Secret Manager for keys and Langfuse Cloud for traces. `/ask` requires an `X-API-Key` header, and the service refuses to start in cloud mode without a key; Cloud Run instance and concurrency caps (default 2 x 10) bound spend from unauthenticated traffic. Full steps, safety defaults and cost notes: [docs/DEPLOY.md](docs/DEPLOY.md).
+The API (`kgrag serve`) runs on Cloud Run, with Cloud SQL Postgres (pgvector) for documents and embeddings, AuraDB for the graph, Secret Manager for keys and Langfuse Cloud for traces. `/ask` requires an `X-API-Key` header, and the service refuses to start in cloud mode without a key; setting `KGRAG_ALLOW_OPEN=1` is the explicit override for an open API; Cloud Run instance and concurrency caps (default 2 x 10) bound spend from unauthenticated traffic. Full steps, safety defaults and cost notes: [docs/DEPLOY.md](docs/DEPLOY.md).
 
 ## Limitations
 
 - Single corpus and a single time window; results may not generalize to other projects or periods.
 - Questions are LLM-drafted from header- and regex-linked evidence, so they over-represent relations visible through explicit IDs and threads.
-- The LLM judge is validated on only about 50 labels.
-- The graph retriever is tuned on the dev split by the same person who reviewed the questions.
+- The LLM judge will be validated on only about 50 labels.
+- Today the graph retriever is tuned on the 10-question dev fixture plus 5 hand-written real-graph questions (`tests/fixtures/tuning_log.json`); a dev-split ablation is pending before the headline run, and the person tuning it is also the person reviewing the questions.
 - ASSIGNED edges are absent: dev@ only carries Jira created / resolved / reopened notifications, so assignments never appear (the parser supports them, tested on hand-written samples).
 - There are no KIP-to-JiraTicket edges: nothing in the current extraction links a KIP to its tickets, so cross-references between them are only visible through shared emails.
 - Ambiguous first names ("Chris", "David") are left unresolved rather than guessed, so some people's mentions stay split across nodes.
@@ -118,7 +127,7 @@ The API (`kgrag serve`) runs on Cloud Run, with Cloud SQL Postgres (pgvector) fo
 ```bash
 uv run pytest                      # everything not marked live
 uv run pytest -m "not integration" # unit tests only, no Docker
-uv run pytest tests/test_smoke.py  # offline end-to-end smoke test (about 10 s)
+uv run pytest tests/test_smoke.py  # offline end-to-end smoke test (needs Docker; about 12 s)
 ```
 
 Markers: `integration` (needs Docker; Postgres and Neo4j start via testcontainers), `quality` (quality/eval tests, non-blocking), `live` (calls paid external APIs; never run by default). The smoke test ingests the dev fixture slice, loads recorded extractions, resolves with both resolvers, builds the graph, indexes, runs the dev evaluation for vector, graph-exact and graph-user with fake answer and judge models, and renders the report. GitHub Actions runs `uv run pytest` on every push and pull request.

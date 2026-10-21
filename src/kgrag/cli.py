@@ -8,7 +8,7 @@ from typing import Any
 import psycopg
 import typer
 
-from kgrag.config import get_settings
+from kgrag.config import get_settings, load_env
 from kgrag.extract.llm import (
     PROMPT_VERSION,
     batch_email_ids,
@@ -43,6 +43,7 @@ app.add_typer(questions_app, name="questions")
 @app.callback()
 def main() -> None:
     """Kafka Atlas command line."""
+    load_env()
 
 
 @app.command()

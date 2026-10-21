@@ -18,7 +18,7 @@ from neo4j.exceptions import ServiceUnavailable, SessionExpired
 from pydantic import BaseModel, Field
 
 from kgrag.answer.chain import Answer
-from kgrag.config import get_settings
+from kgrag.config import get_settings, load_env
 from kgrag.observability import tag_current_trace, traced
 from kgrag.retrieve.embeddings import EmbeddingsNotConfiguredError, embeddings_configured
 from kgrag.retrieve.types import RetrievalResult
@@ -191,6 +191,7 @@ def check_access_config() -> bool:
 
 
 def create_app(deps: Deps | None = None) -> FastAPI:
+    load_env()
     protected = check_access_config()
     d = deps or default_deps()
 
