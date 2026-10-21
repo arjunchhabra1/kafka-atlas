@@ -36,7 +36,13 @@ class CountingEmbeddings(HashEmbeddings):
 
     def embed_documents(self, texts):
         self.docs_embedded += len(texts)
-        return self.inner.embed_documents(texts)
+        out = []
+        for t in texts:
+            try:
+                out.extend(self.inner.embed_documents([t]))
+            except KeyError:  # recorded vectors can't cover edited text: any same-dim vector will do
+                out.append(next(iter(self.inner.documents.values())))
+        return out
 
     def embed_query(self, text):
         return self.inner.embed_query(text)

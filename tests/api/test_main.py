@@ -259,6 +259,7 @@ def test_default_app_health_without_api_keys(monkeypatch):
 
     for k in ("ANTHROPIC_API_KEY", "VOYAGE_API_KEY", "LANGFUSE_PUBLIC_KEY", "LANGFUSE_SECRET_KEY"):
         monkeypatch.delenv(k, raising=False)
+    monkeypatch.setattr(m, "load_env", lambda *a, **k: None)  # don't re-read the real .env
     closed = []
 
     class FakeDriver:

@@ -16,7 +16,22 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
 FIXTURES = ROOT / "tests" / "fixtures"
 OUT = FIXTURES / "recorded_embeddings.json"
-BATCH = 128
+BATCH = 16  # small: unbilled Voyage accounts are limited to 3 RPM / 10K TPM
+
+
+def with_retry(fn, *args):
+    """Call fn, sleeping and retrying on provider rate limits."""
+    import time
+
+    for attempt in range(60):
+        try:
+            return fn(*args)
+        except Exception as e:
+            if "RateLimit" not in type(e).__name__:
+                raise
+            print(f"rate limited; sleeping 25s (attempt {attempt + 1})", flush=True)
+            time.sleep(25)
+    raise RuntimeError("still rate limited after retries")
 
 
 def fixture_texts() -> tuple[list[str], list[str]]:
@@ -47,9 +62,10 @@ def fixture_texts() -> tuple[list[str], list[str]]:
 
 
 def main() -> None:
-    from kgrag.config import get_settings
+    from kgrag.config import get_settings, load_env
     from kgrag.retrieve.embeddings import EmbeddingsNotConfiguredError, get_embeddings
 
+    load_env()
     try:
         emb = get_embeddings()
     except EmbeddingsNotConfiguredError as e:
@@ -63,12 +79,13 @@ def main() -> None:
     new = 0
     for section, texts, embed in (
         ("documents", docs, emb.embed_documents),
-        ("queries", queries, lambda b: [emb.embed_query(t) for t in b]),
+        ("queries", queries, lambda b: [with_retry(emb.embed_query, t) for t in b]),
     ):
         todo = [t for t in texts if t not in data[section]]
         for i in range(0, len(todo), BATCH):
             batch = todo[i : i + BATCH]
-            data[section].update(zip(batch, embed(batch), strict=True))
+            data[section].update(zip(batch, embed(batch) if section == "queries" else with_retry(embed, batch), strict=True))
+            OUT.write_text(json.dumps(data))  # checkpoint
             print(f"{section}: embedded {min(i + BATCH, len(todo))}/{len(todo)}")
         new += len(todo)
     OUT.write_text(json.dumps(data))
