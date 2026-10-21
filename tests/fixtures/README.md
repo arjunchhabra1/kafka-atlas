@@ -9,6 +9,7 @@ retrieval tests grade against it, and `tests/test_fixture_integrity.py` checks t
 | `recorded_extractions.json` | `{email_id: response}`: the raw cached Sonnet response (`llm_cache.response`, prompt `extract-v1`) for each human email. Tests run the real `parse_response` on it. |
 | `gold_entities.json` | One cluster per real person or component (`entity`, `type`, `mention_ids`, `tags`, and an optional `note`). It covers every Person and Component mention that comes from header, Jira or LLM sources. Read the clusters that have a `note` first: those were judgment calls. |
 | `dev_questions.json` | 10 questions (4 single_hop, 2 inference, 2 comparison, 1 temporal, 1 null), each with a short answer and `gold_doc_ids`. |
+| `tuning_log.json` | The 5 hand-written real-graph questions that shaped graph-retriever rules (Task 15), with the rule each one motivated. It is provenance only: no test grades against it, and the rules must be re-validated on the dev split. |
 
 ## Ids
 

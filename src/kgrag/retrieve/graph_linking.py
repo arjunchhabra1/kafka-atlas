@@ -1,55 +1,56 @@
 """Entity linking for the graph retriever: which graph nodes does a question talk about?
 
-Three tiers, strongest first (each seed records `how` it was linked, for the trace):
+Tiers, strongest first. Each seed records `how` it was linked, for the trace, and its weight
+comes from GraphRetrieverConfig:
 
-  1. `id`          canonical KIP / Jira / release ids found by the same regexes that built the
-                   graph (`extract_ids`), so "KIP 848" in a question hits node `KIP:KIP-848`.
-                   A release `4.0` also links its `4.0.0` twin (both forms exist as nodes).
-  2. `exact_name`  capitalised word runs ("Andrew Schofield", "DescribeGroups API") whose text
-     `fuzzy_name`  equals a Person/Component name (case-insensitive); multi-word runs that
-                   didn't match exactly get a strict fuzzy lookup ("Cristopher Shannon").
-  3. `node_search` embedding search over node names with the whole question: a low-weight
-                   fallback for lowercase or paraphrased names ("the jetty upgrade"), used only
-                   when tiers 1-2 found nothing (it is noisy next to precise seeds).
+  1. `id`           Canonical KIP / Jira / release ids, found by the same regexes that built
+                    the graph (`extract_ids`), so "KIP 123" hits node `KIP:KIP-123`. A release
+                    `x.y` also links its `x.y.0` twin, because both forms exist as nodes.
+  2. `exact_name`   Multi-word capitalised runs ("Jane Doe", "DescribeGroups API") whose text
+     `fuzzy_name`   equals a Person/Component name (case-insensitive). Multi-word runs that
+                    don't match exactly get a strict fuzzy lookup ("Jane Do").
+  3. `single_name`  One-word names ("Jane"). These are often ambiguous (many people share a
+                    first name), so they get a *weak* seed.
+  4. `node_search`  Embedding search over node names with the whole question. This is a
+                    fallback for lowercase or paraphrased names, used only when nothing else
+                    links, because it is noisy next to precise seeds.
 
-Tiers 1-2 are "strong" seeds (walked 2 hops, diversified over); tier 3 is "weak" (1 hop).
-Pure text helpers (`candidate_ngrams`, `select_spans`, `id_seeds`, `release_aliases`) are
-separate from the graph lookups so they can be unit-tested without a database.
+Tiers 1-2 are *strong*: they walk 2 hops, get diversified, anchor text and set the focus.
+Tiers 3-4 are *weak*: they walk 1 hop only. When several nodes share a name, they are ranked
+by degree (most connected first), then by id, and the first `max_per_span` are kept.
+
+The pure text helpers (`candidate_ngrams`, `select_spans`, `name_tier`, `rank_same_name`,
+`id_seeds`, `release_aliases`) are kept apart from the graph lookups, so they can be
+unit-tested without a database.
 """
 
 import re
+from collections.abc import Callable
 from dataclasses import dataclass, field
 
 from rapidfuzz import fuzz, utils
 
 from kgrag.extract.regex_ids import extract_ids
 from kgrag.graph.kg import KnowledgeGraph
+from kgrag.retrieve.graph_config import DEFAULT_CONFIG, GraphRetrieverConfig
 
-# Words that start a capitalised run without being part of a name: question words, schema
-# words and calendar words. They split runs ("After Andrew Schofield" -> "Andrew Schofield").
+# Words that start a capitalised run without being part of a name: question words,
+# sentence-initial imperatives, schema words and calendar words. They split runs, so
+# "After Jane Doe" becomes "Jane Doe" and "Compare KIP-1 and KIP-2" yields no name.
 STOPWORDS = frozenset("""
     a an the and or but if is are was were be been am do does did has have had can could will
     would should may might must shall i we you he she it they this that these those there
     who whom whose what which when where why how after before since during between both
     each either neither in on at of for from to by with about into over under than then
+    name names list compare describe explain summarize summarise show give tell find
+    identify outline please what's who's
     kip kips jira ticket tickets kafka apache release releases version versions vote votes
     thread discussion proposal list dev mail email emails
     january february march april may june july august september october november december
     monday tuesday wednesday thursday friday saturday sunday
 """.split())
-MAX_NGRAM = 4            # longest name we try ("Christopher L. Shannon" is 3 tokens)
-MIN_SINGLE_LEN = 3       # single tokens shorter than this ("JS", "Al") are never looked up
 NAME_LABELS = ("Person", "Component")
-MAX_PER_SPAN = 3         # several nodes may share a name (resolver splits); keep the first few
-FUZZY_MIN_RATIO = 85     # stricter than kg.find_nodes' WRatio>=80, which matches partial names
-FUZZY_TIE = 5            # keep fuzzy hits within this many points of the best one
-NODE_SEARCH_K = 5
-NODE_SEARCH_MIN_SIM = 0.5  # embedding-model dependent; retune when Voyage embeddings land
-NODE_SEARCH_MAX = 2
-
-# Seed weights: how much we trust each linking tier. They scale every path score below.
-WEIGHT = {"id": 1.0, "exact_name": 1.0, "fuzzy_name": 0.8, "node_search": 0.3}
-STRONG = ("id", "exact_name", "fuzzy_name")
+STRONG_TIERS = frozenset({"id", "exact_name", "fuzzy_name"})
 
 _TOKEN = re.compile(r"[A-Za-z0-9][A-Za-z0-9_-]*")
 _INITIAL_GAP = re.compile(r"\.\s+")
@@ -68,13 +69,13 @@ class Seed:
     id: str
     label: str
     name: str
-    how: str        # id | exact_name | fuzzy_name | node_search
+    how: str        # id | exact_name | fuzzy_name | single_name | node_search
     surface: str    # the question text it was linked from
     weight: float
 
     @property
     def strong(self) -> bool:
-        return self.how in STRONG
+        return self.how in STRONG_TIERS
 
 
 @dataclass
@@ -116,15 +117,15 @@ def _runs(question: str) -> list[list[re.Match]]:
     return runs
 
 
-def candidate_ngrams(question: str) -> list[NameSpan]:
-    """Every n-gram (<= MAX_NGRAM tokens) of every capitalised run, longest first then leftmost."""
+def candidate_ngrams(question: str, config: GraphRetrieverConfig = DEFAULT_CONFIG) -> list[NameSpan]:
+    """Every n-gram (<= max_ngram tokens) of every capitalised run, longest first then leftmost."""
     spans = []
     for run in _runs(question):
-        for n in range(min(len(run), MAX_NGRAM), 0, -1):
+        for n in range(min(len(run), config.max_ngram), 0, -1):
             for i in range(len(run) - n + 1):
                 first, last = run[i], run[i + n - 1]
                 text = question[first.start():last.end()]
-                if n == 1 and (len(text) < MIN_SINGLE_LEN or text.isdigit()):
+                if n == 1 and (len(text) < config.min_single_len or text.isdigit()):
                     continue
                 spans.append(NameSpan(text, first.start(), last.end(), n))
     return sorted(spans, key=lambda s: (-s.ntokens, s.start))
@@ -137,6 +138,16 @@ def select_spans(spans: list[NameSpan], matched: set[str]) -> list[NameSpan]:
         if s.text.lower() in matched and all(s.end <= c.start or c.end <= s.start for c in chosen):
             chosen.append(s)
     return sorted(chosen, key=lambda s: s.start)
+
+
+def name_tier(span: NameSpan) -> str:
+    """Exact name matches: multi-word names are strong, one-word names are weak."""
+    return "exact_name" if span.ntokens >= 2 else "single_name"
+
+
+def rank_same_name(rows: list[dict]) -> list[dict]:
+    """Nodes sharing a name, most connected first (then by id): the likeliest referent."""
+    return sorted(rows, key=lambda r: (-r["degree"], r["id"]))
 
 
 def release_aliases(release: str) -> list[str]:
@@ -159,38 +170,51 @@ def id_seeds(question: str) -> list[tuple[str, str, str]]:
     return out
 
 
+def _aliases(kind: str, cid: str) -> list[str]:
+    return [f"{kind}:{a}" for a in (release_aliases(cid) if kind == "Release" else [cid])]
+
+
 # --- graph lookups ------------------------------------------------------------------------
 
-def _exact_lookup(kg: KnowledgeGraph, ids: list[str], names: list[str]) -> list[dict]:
+def _exact_lookup(kg: KnowledgeGraph, ids: list[str], names: list[str],
+                  config: GraphRetrieverConfig) -> list[dict]:
     """One query for all candidate ids and names (instead of one find_nodes call per n-gram)."""
     return kg.cypher(
         "MATCH (n) WHERE NOT n:GraphMeta AND NOT n:Email "
         "AND (n.id IN $ids OR toLower(n.name) IN $names) "
-        "RETURN n.id AS id, labels(n)[0] AS label, n.name AS name ORDER BY n.id",
-        {"ids": ids, "names": names})
+        "RETURN n.id AS id, labels(n)[0] AS label, n.name AS name, "
+        "COUNT { (n)--() } AS degree ORDER BY n.id",
+        {"ids": ids, "names": names}, timeout=config.query_timeout_s)
 
 
 def _valid(node_id: str) -> bool:
     return ":?" not in node_id  # unparseable id mentions ("the KIP") become `KIP:?<mention>` nodes
 
 
-def link_entities(question: str, kg: KnowledgeGraph) -> Linking:
-    """Link the question to graph nodes; see the module docstring for the tiers."""
+def _tier_weight(how: str, config: GraphRetrieverConfig) -> float:
+    return {"id": config.weight_id, "exact_name": config.weight_exact,
+            "single_name": config.weight_single_name}[how]
+
+
+def link_entities(question: str, kg: KnowledgeGraph,
+                  config: GraphRetrieverConfig = DEFAULT_CONFIG,
+                  embed: Callable[[], list[float]] | None = None) -> Linking:
+    """Link the question to graph nodes (see the module docstring for the tiers).
+    `embed` returns the question embedding; it is called only for the node-search fallback."""
     out = Linking()
     ids = id_seeds(question)
-    wanted = {f"{kind}:{alias}": surface for kind, cid, surface in ids
-              for alias in (release_aliases(cid) if kind == "Release" else [cid])}
-    spans = candidate_ngrams(question)
-    rows = [r for r in _exact_lookup(kg, sorted(wanted), sorted({s.text.lower() for s in spans}))
+    wanted = sorted({a for kind, cid, _ in ids for a in _aliases(kind, cid)})
+    spans = candidate_ngrams(question, config)
+    rows = [r for r in _exact_lookup(kg, wanted, sorted({s.text.lower() for s in spans}), config)
             if _valid(r["id"])]
 
-    found_ids = {r["id"]: r for r in rows if r["id"] in wanted}
+    by_id = {r["id"]: r for r in rows}
     for kind, cid, surface in ids:
-        hits = [found_ids[f"{kind}:{a}"] for a in (release_aliases(cid) if kind == "Release" else [cid])
-                if f"{kind}:{a}" in found_ids]
+        hits = [by_id[a] for a in _aliases(kind, cid) if a in by_id]
         if not hits:
             out.dropped.append({"surface": surface, "reason": "id not in graph"})
-        out.seeds += [Seed(r["id"], r["label"], r["name"], "id", surface, WEIGHT["id"]) for r in hits]
+        out.seeds += [Seed(r["id"], r["label"], r["name"], "id", surface, config.weight_id)
+                      for r in hits]
 
     by_name: dict[str, list[dict]] = {}
     for r in rows:
@@ -198,40 +222,44 @@ def link_entities(question: str, kg: KnowledgeGraph) -> Linking:
             by_name.setdefault((r["name"] or "").lower(), []).append(r)
     chosen = select_spans(spans, set(by_name))
     for s in chosen:
-        out.seeds += [Seed(r["id"], r["label"], r["name"], "exact_name", s.text, WEIGHT["exact_name"])
-                      for r in by_name[s.text.lower()][:MAX_PER_SPAN]]
+        how = name_tier(s)
+        out.seeds += [Seed(r["id"], r["label"], r["name"], how, s.text, _tier_weight(how, config))
+                      for r in rank_same_name(by_name[s.text.lower()])[:config.max_per_span]]
 
     for s in spans:  # fuzzy: multi-word spans not overlapping an exact match
         if s.ntokens < 2 or any(not (s.end <= c.start or c.end <= s.start) for c in chosen):
             continue
-        hits = _fuzzy(kg, s.text)
+        hits = _fuzzy(kg, s.text, config)
         if hits:
             chosen.append(s)
             out.seeds += [Seed(n.id, n.label, n.name, "fuzzy_name", s.text,
-                               round(WEIGHT["fuzzy_name"] * ratio / 100, 4)) for n, ratio in hits]
+                               round(config.weight_fuzzy * ratio / 100, 4)) for n, ratio in hits]
 
-    if out.seeds:
+    if out.seeds or embed is None:
         return _dedupe(out)
-    extra = [(n, sim) for n, sim in kg.search_nodes(question, k=NODE_SEARCH_K)
-             if n.label in NAME_LABELS and sim >= NODE_SEARCH_MIN_SIM and _valid(n.id)]
-    out.seeds += [Seed(n.id, n.label, n.name, "node_search", question, round(WEIGHT["node_search"] * sim, 4))
-                  for n, sim in extra[:NODE_SEARCH_MAX]]
+    found = kg.search_nodes(question, k=config.node_search_k, embedding=embed())
+    extra = [(n, sim) for n, sim in found if n.label in NAME_LABELS
+             and sim >= config.node_search_min_sim and _valid(n.id)]
+    out.seeds += [Seed(n.id, n.label, n.name, "node_search", question,
+                       round(config.weight_node_search * sim, 4))
+                  for n, sim in extra[:config.node_search_max]]
     return _dedupe(out)
 
 
-def _fuzzy(kg: KnowledgeGraph, text: str) -> list:
+def _fuzzy(kg: KnowledgeGraph, text: str, config: GraphRetrieverConfig) -> list:
     """Person/Component nodes whose name is a near-exact match of `text`: [(node, ratio)]."""
     scored = []
     for n in kg.find_nodes(text, fuzzy=True, limit=10):
         if n.label in NAME_LABELS and _valid(n.id):
             ratio = fuzz.ratio(text, n.name, processor=utils.default_process)
-            if ratio >= FUZZY_MIN_RATIO:
+            if ratio >= config.fuzzy_min_ratio:
                 scored.append((n, ratio))
     if not scored:
         return []
     best = max(r for _, r in scored)
-    keep = sorted((p for p in scored if p[1] >= best - FUZZY_TIE), key=lambda p: (-p[1], p[0].id))
-    return keep[:MAX_PER_SPAN]
+    keep = sorted((p for p in scored if p[1] >= best - config.fuzzy_tie),
+                  key=lambda p: (-p[1], p[0].id))
+    return keep[:config.max_per_span]
 
 
 def _dedupe(linking: Linking) -> Linking:

@@ -143,3 +143,24 @@ def test_search_chunks_warns_on_hits_without_document(fixture_kg, caplog):
         fixture_kg.conn.execute(
             f"insert into documents ({', '.join(cols)}) values ({', '.join(['%s'] * len(cols))})", row)
         fixture_kg.conn.commit()
+
+
+def test_search_chunks_restrict_to_and_precomputed_embedding(fixture_kg):
+    q = TEST_QUERIES["kip_chunks"]
+    full = fixture_kg.search_chunks(q, k=10)
+    keep = [full[3].doc_id, full[1].doc_id, "nope:0"]
+    restricted = fixture_kg.search_chunks(q, k=10, restrict_to=keep)
+    assert [h.doc_id for h in restricted] == [full[1].doc_id, full[3].doc_id]
+    assert fixture_kg.search_chunks(q, k=10, restrict_to=[]) == []
+    vec = fixture_kg.embed_query(q)
+    assert fixture_kg.search_chunks(q, k=10, embedding=vec) == full
+
+
+def test_search_nodes_accepts_precomputed_embedding(fixture_kg):
+    q = TEST_QUERIES["kip_name"]
+    assert fixture_kg.search_nodes(q, k=3, embedding=fixture_kg.embed_query(q)) == \
+        fixture_kg.search_nodes(q, k=3)
+
+
+def test_cypher_accepts_timeout(fixture_kg):
+    assert fixture_kg.cypher("MATCH (n:KIP) RETURN count(n) AS c", timeout=5.0)[0]["c"] >= 2

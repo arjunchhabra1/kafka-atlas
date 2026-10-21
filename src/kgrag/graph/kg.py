@@ -5,12 +5,13 @@ Wraps the Neo4j graph, the Postgres `documents` table and the two pgvector colle
 """
 
 import logging
+from collections.abc import Sequence
 from datetime import date, datetime
 from typing import Literal
 
 import psycopg
 from langchain_postgres import PGVector
-from neo4j import Driver
+from neo4j import Driver, unit_of_work
 from neo4j.time import DateTime
 from rapidfuzz import fuzz, process, utils
 
@@ -109,9 +110,16 @@ class KnowledgeGraph:
         """The `documents` ids that justify this edge."""
         return list(edge.props.get("source_doc_ids") or [])
 
-    def search_nodes(self, query: str, k: int = 10) -> list[tuple[Node, float]]:
-        """Entities whose name embeds closest to `query`: (node, similarity), best first."""
-        hits = self.node_store.similarity_search_with_score(query, k=k)
+    def embed_query(self, text: str) -> list[float]:
+        """The query embedding both searches use; compute it once and pass it as `embedding=`."""
+        return self.chunk_store.embeddings.embed_query(text)
+
+    def search_nodes(self, query: str, k: int = 10,
+                     embedding: list[float] | None = None) -> list[tuple[Node, float]]:
+        """Entities whose name embeds closest to `query`: (node, similarity), best first.
+        `embedding`: the precomputed `embed_query(query)`, to avoid embedding it again."""
+        vec = self.embed_query(query) if embedding is None else embedding
+        hits = self.node_store.similarity_search_with_score_by_vector(vec, k=k)
         nodes = self._fetch_nodes([d.metadata["node_id"] for d, _ in hits])
         found = [(nodes[d.metadata["node_id"]], 1.0 - dist) for d, dist in hits
                  if d.metadata["node_id"] in nodes]
@@ -120,9 +128,18 @@ class KnowledgeGraph:
                         len(hits) - len(found), len(hits))
         return found
 
-    def search_chunks(self, query: str, k: int = 20) -> list[Evidence]:
-        """Top-k chunks by vector similarity, with their text from `documents`."""
-        hits = self.chunk_store.similarity_search_with_score(query, k=k)
+    def search_chunks(self, query: str, k: int = 20, restrict_to: Sequence[str] | None = None,
+                      embedding: list[float] | None = None) -> list[Evidence]:
+        """Top-k chunks by vector similarity, with their text from `documents`.
+
+        `restrict_to`: only rank these doc ids (e.g. a reranker's candidates).
+        `embedding`: the precomputed `embed_query(query)`, to avoid embedding it again.
+        """
+        if restrict_to is not None and not restrict_to:
+            return []
+        vec = self.embed_query(query) if embedding is None else embedding
+        where = None if restrict_to is None else {"doc_id": {"$in": list(restrict_to)}}
+        hits = self.chunk_store.similarity_search_with_score_by_vector(vec, k=k, filter=where)
         ids = [d.metadata["doc_id"] for d, _ in hits]
         text = {d.doc_id: d.text for d in get_documents(self.conn, ids)}
         self.conn.commit()
@@ -138,7 +155,14 @@ class KnowledgeGraph:
         self.conn.commit()
         return docs
 
-    def cypher(self, query: str, params: dict | None = None) -> list[dict]:
-        """Run read-only Cypher (a read transaction: writes raise) and return rows as dicts."""
+    def cypher(self, query: str, params: dict | None = None,
+               timeout: float | None = None) -> list[dict]:
+        """Run read-only Cypher (a read transaction: writes raise) and return rows as dicts.
+        `timeout` (seconds) is a server-side transaction timeout; None = server default."""
+
+        @unit_of_work(timeout=timeout)
+        def work(tx):
+            return [dict(r) for r in tx.run(query, params or {})]
+
         with self.driver.session() as s:
-            return s.execute_read(lambda tx: [dict(r) for r in tx.run(query, params or {})])
+            return s.execute_read(work)

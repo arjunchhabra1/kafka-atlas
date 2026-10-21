@@ -1,0 +1,45 @@
+{
+  "description": "Questions outside the dev fixture that were used to shape graph_retriever rules (Task 15). They are hand-written against the real compose graph (user resolver), with HashEmbeddings as the stand-in for Voyage. Every rule listed here must be re-validated by a dev-split ablation (kgrag.retrieve.graph_ablation) before the headline run. No further tuning on these questions.",
+  "graph": "compose Neo4j, user resolver, built 2026-10-21; documents from compose Postgres (22,138 rows)",
+  "questions": [
+    {
+      "id": "real-1",
+      "question": "Who proposed KIP-932 and which committers voted on it?",
+      "observed": "Hop-2 edges matching a cue were not decayed, and the hop-2 frontier was credited to every seed. The top docs became the proposer's votes on *other* KIPs (KIP -> proposer -> VOTED -> another KIP).",
+      "rules": ["cue_no_decay (tried, reverted)", "hop2_sibling_skip"]
+    },
+    {
+      "id": "real-2",
+      "question": "Which KIPs does KIP-1071 depend on, and who proposed KIP-848?",
+      "observed": "off_focus also damped KIP -DEPENDS_ON-> other-KIP edges, which are exactly the answer to 'which KIPs does X depend on'.",
+      "rules": ["off_focus_only_across_types"]
+    },
+    {
+      "id": "real-3",
+      "question": "Lucas Brutschy voted on KIP-892; did he also review KIP-1071, and what did he say?",
+      "observed": "Docs behind a person reached by both KIP seeds (release-vote emails of a frequent voter) looked like bridges, because each seed expanded that person at hop 2. Node-name search also added noise seeds next to the precise ones.",
+      "rules": ["frontier_credited_to_best_seed", "node_search_fallback_only"]
+    },
+    {
+      "id": "real-4",
+      "question": "Which Jira tickets blocked the 3.5.0 release and who resolved them?",
+      "observed": "Retrieved docs were relevant (blocker email and Jira resolutions). This question was used to check release aliasing (3.5 <-> 3.5.0) and hub capping; no rule was added because of it.",
+      "rules": []
+    },
+    {
+      "id": "real-5",
+      "question": "What concerns did Jun Rao raise on KIP-966, and how did he vote?",
+      "observed": "The person seed's votes on other KIPs outranked the person's own review comments on the named KIP.",
+      "rules": ["off_focus", "bridge_boost_on_seed_to_seed_edges"]
+    }
+  ],
+  "rules": {
+    "hop2_sibling_skip": "At hop 2, skip edges whose far end has the seed's own label (KIP -> person -> another KIP).",
+    "frontier_credited_to_best_seed": "Each hop-1 entity is expanded at hop 2 once, for the seed reaching it best.",
+    "off_focus": "Hop-1 edge from a seed into another node of a type the question names: x off_focus_factor (0.5).",
+    "off_focus_only_across_types": "off_focus applies only when the neighbour's type differs from the source seed's type.",
+    "bridge_boost_on_seed_to_seed_edges": "The bridge factor also applies to edges directly between two seeds.",
+    "node_search_fallback_only": "Embedding node-name search is used only when no id or name links.",
+    "cue_no_decay (tried, reverted)": "Cued edge types were exempted from hop decay; reverted after real-1."
+  }
+}

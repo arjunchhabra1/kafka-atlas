@@ -2,10 +2,14 @@
 
 import pytest
 
+from kgrag.retrieve.graph_config import DEFAULT_CONFIG, GRAPH_ONLY_CONFIG, GraphRetrieverConfig
 from kgrag.retrieve.graph_linking import (
+    NameSpan,
     Seed,
     candidate_ngrams,
     id_seeds,
+    name_tier,
+    rank_same_name,
     release_aliases,
     select_spans,
 )
@@ -31,18 +35,23 @@ def _texts(spans):
 # --- linking ------------------------------------------------------------------------------
 
 def test_candidate_ngrams_longest_first_and_trims_stopwords():
-    q = "After Andrew Schofield simplified KIP-1043, which tool did it add?"
+    q = "After Jane Doe simplified KIP-123, which tool did it add?"
     texts = _texts(candidate_ngrams(q))
-    assert texts[0] == "Andrew Schofield"  # "After" is trimmed, the 2-gram comes first
-    assert set(texts) == {"Andrew Schofield", "Andrew", "Schofield"}
-    assert "KIP-1043" not in texts and "After" not in texts and "Which" not in texts
+    assert texts[0] == "Jane Doe"  # "After" is a stopword, the 2-gram comes first
+    assert set(texts) == {"Jane Doe", "Jane", "Doe"}
+    assert "KIP-123" not in texts and "After" not in texts and "Which" not in texts
+
+
+@pytest.mark.parametrize("verb", ["Name", "List", "Compare", "Which", "Who", "Summarize", "Describe"])
+def test_sentence_initial_imperatives_are_not_names(verb):
+    assert _texts(candidate_ngrams(f"{verb} the reviewers")) == []
 
 
 def test_candidate_ngrams_handles_initials_possessives_and_hyphens():
-    texts = _texts(candidate_ngrams("Did Christopher L. Shannon reply to David Jacot's and Chia-Ping Tsai's notes?"))
-    assert "Christopher L. Shannon" in texts
-    assert "David Jacot" in texts and "Jacot's" not in " ".join(texts)
-    assert "Chia-Ping Tsai" in texts
+    texts = _texts(candidate_ngrams("Did Mary J. Major reply to Jon Smith's and Li-Na Wu's notes?"))
+    assert "Mary J. Major" in texts
+    assert "Jon Smith" in texts and "Smith's" not in " ".join(texts)
+    assert "Li-Na Wu" in texts
 
 
 def test_candidate_ngrams_camel_case_and_numbered_names():
@@ -56,9 +65,21 @@ def test_candidate_ngrams_skips_short_single_tokens():
 
 
 def test_select_spans_prefers_longest_and_never_overlaps():
-    spans = candidate_ngrams("Did Andrew Schofield and Andrew agree?")
-    chosen = select_spans(spans, {"andrew schofield", "andrew", "schofield"})
-    assert [(s.text, s.start) for s in chosen] == [("Andrew Schofield", 4), ("Andrew", 25)]
+    spans = candidate_ngrams("Did Jane Doe and Jane agree?")
+    chosen = select_spans(spans, {"jane doe", "jane", "doe"})
+    assert [(s.text, s.start) for s in chosen] == [("Jane Doe", 4), ("Jane", 17)]
+
+
+def test_single_word_names_are_a_weak_tier():
+    assert name_tier(NameSpan("Jane Doe", 0, 8, 2)) == "exact_name"
+    assert name_tier(NameSpan("Jane", 0, 4, 1)) == "single_name"
+    assert not Seed("Person:j", "Person", "Jane", "single_name", "Jane", 0.5).strong
+    assert Seed("Person:jd", "Person", "Jane Doe", "exact_name", "Jane Doe", 1.0).strong
+
+
+def test_rank_same_name_by_degree_then_id():
+    rows = [{"id": "P:b", "degree": 3}, {"id": "P:a", "degree": 3}, {"id": "P:c", "degree": 40}]
+    assert [r["id"] for r in rank_same_name(rows)] == ["P:c", "P:a", "P:b"]
 
 
 def test_release_aliases():
@@ -73,13 +94,44 @@ def test_id_seeds_from_question():
         ("JiraTicket", "KAFKA-16891", "KAFKA-16891")]
 
 
-# --- scoring ------------------------------------------------------------------------------
+# --- cues ---------------------------------------------------------------------------------
 
-def test_relation_cues():
-    assert relation_cues("Who voted on it and who proposed it?") >= {"VOTED", "PROPOSED"}
-    assert "RESOLVED" in relation_cues("Who resolved the ticket?")
+@pytest.mark.parametrize("question, cue", [
+    ("Who voted on it?", "VOTED"),
+    ("How many binding votes did it get?", "VOTED"),
+    ("Who proposed it?", "PROPOSED"),
+    ("When was the discussion thread started?", "PROPOSED"),
+    ("Who resolved the ticket?", "RESOLVED"),
+    ("Who created the Jira ticket KAFKA-1?", "FILED"),
+    ("Who opened an issue for it?", "FILED"),
+    ("Who filed KAFKA-1?", "FILED"),
+    ("What concerns did she raise?", "REVIEWED"),
+    ("Which tickets blocked the release?", "BLOCKS"),
+    ("Which KIPs does it depend on?", "DEPENDS_ON"),
+    ("Which release did it ship in?", "FIX_VERSION"),
+    ("Which components does it affect?", "AFFECTS"),
+    ("Does it supersede KIP-1?", "SUPERSEDES"),
+])
+def test_relation_cues_positives(question, cue):
+    assert cue in relation_cues(question)
+
+
+@pytest.mark.parametrize("question, not_cue", [
+    ("Which open-source project uses it?", "FILED"),
+    ("He agreed to open the vote", "FILED"),
+    ("Which versions should the KIP target?", "AFFECTS"),
+    ("Who leads the effort?", "PROPOSED"),
+    ("Is this a requirement?", "DEPENDS_ON"),
+])
+def test_relation_cues_negatives(question, not_cue):
+    assert not_cue not in relation_cues(question)
+
+
+def test_relation_cues_none():
     assert relation_cues("What is a pizza?") == frozenset()
 
+
+# --- scoring ------------------------------------------------------------------------------
 
 def test_edge_score_orders_semantic_over_structural_and_decays_by_hop():
     cues = frozenset()
@@ -89,53 +141,73 @@ def test_edge_score_orders_semantic_over_structural_and_decays_by_hop():
     assert edge_score("VOTED", 1.0, 1, 1.0, frozenset({"VOTED"})) > edge_score("VOTED", 1.0, 1, 1.0, cues)
     assert edge_score("VOTED", 1.0, 1, 1.0, cues, bridge=True) > edge_score("VOTED", 1.0, 1, 1.0, cues)
     assert edge_score("VOTED", None, 1, 0.5, cues) == pytest.approx(edge_score("VOTED", 1.0, 1, 0.5, cues))
+    assert edge_score("NEW_TYPE", 1.0, 1, 1.0, cues) == DEFAULT_CONFIG.unknown_edge_weight
+
+
+def test_edge_score_switches():
+    off = DEFAULT_CONFIG.with_(cues=False, bridge_boost=False)
+    cued = frozenset({"VOTED"})
+    assert edge_score("VOTED", 1.0, 1, 1.0, cued, bridge=True, config=off) == \
+        edge_score("VOTED", 1.0, 1, 1.0, frozenset(), config=off)
 
 
 def test_doc_share_favours_specific_edges():
     assert doc_share(1) == 1.0 and doc_share(0) == 1.0
     assert doc_share(16) == pytest.approx(0.5)
+    assert doc_share(16, DEFAULT_CONFIG.with_(doc_share=False)) == 1.0
+
+
+def test_graph_only_config_has_no_embedding_terms():
+    assert not GRAPH_ONLY_CONFIG.semantic_rerank and not GRAPH_ONLY_CONFIG.vector_backfill
+    assert GRAPH_ONLY_CONFIG.cues and GraphRetrieverConfig() == DEFAULT_CONFIG
 
 
 def _seed(node_id, name, how="id"):
     return Seed(node_id, node_id.split(":")[0], name, how, name, 1.0)
 
 
-def test_anchor_adds_support_for_seeds_named_in_text():
-    supports = {"jira:4": {"KIP:KIP-1043": Support(0.2, "far")}, "e:1": {"KIP:KIP-1043": Support(0.9, "x")}}
-    texts = {"jira:4": "resolved KAFKA-16437 (KIP-1032) as Fixed", "e:1": "about KIP-10320 and KIP-1043"}
-    seeds = [_seed("KIP:KIP-1032", "KIP-1032"), _seed("KIP:KIP-1043", "KIP-1043"),
-             _seed("Person:andrew", "Andrew", how="exact_name")]
-    assert anchor(supports, texts, seeds) == 1
-    assert supports["jira:4"]["KIP:KIP-1032"].path == "text names KIP-1032"
-    assert supports["jira:4"]["KIP:KIP-1043"].score == 0.2   # not named in jira:4
-    assert "KIP:KIP-1032" not in supports["e:1"]             # KIP-10320 is not KIP-1032
-    assert supports["e:1"]["KIP:KIP-1043"].path == "x"       # already stronger than an anchor
+def test_anchor_adds_support_for_seeds_named_in_text_without_mutating_input():
+    supports = {"jira:4": {"KIP:KIP-2": Support(0.2, "far")}, "e:1": {"KIP:KIP-2": Support(0.9, "x")}}
+    before = {d: dict(s) for d, s in supports.items()}
+    texts = {"jira:4": "resolved KAFKA-7 (KIP-1) as Fixed", "e:1": "about KIP-10 and KIP-2",
+             "not-a-candidate": "KIP-1"}
+    seeds = [_seed("KIP:KIP-1", "KIP-1"), _seed("KIP:KIP-2", "KIP-2"),
+             _seed("Person:jane doe", "Jane Doe", how="single_name")]
+    out, added = anchor(supports, texts, seeds)
+    assert added == 1 and supports == before and "not-a-candidate" not in out
+    assert out["jira:4"]["KIP:KIP-1"].path == "text names KIP-1"
+    assert out["jira:4"]["KIP:KIP-2"].score == 0.2   # not named in jira:4
+    assert "KIP:KIP-1" not in out["e:1"]             # KIP-10 is not KIP-1
+    assert out["e:1"]["KIP:KIP-2"].path == "x"       # already stronger than an anchor
 
 
-def test_anchor_skips_single_word_names():
+def test_anchor_skips_single_word_names_and_weak_seeds():
     supports = {"d": {"KIP:KIP-1": Support(0.5, "p")}}
-    assert anchor(supports, {"d": "Andrew wrote this"}, [_seed("Person:andrew", "Andrew", "exact_name")]) == 0
+    jane = Seed("Person:jane", "Person", "Jane", "exact_name", "Jane", 1.0)
+    assert anchor(supports, {"d": "Jane wrote this"}, [jane])[1] == 0
 
 
 def test_off_focus_only_for_other_nodes_of_a_named_type():
-    kip, jun = _seed("KIP:KIP-966", "KIP-966"), _seed("Person:jun", "Jun Rao", "exact_name")
-    seeds = [kip, jun]
-    assert off_focus("KIP", "KIP:KIP-1109", jun, seeds)          # Jun Rao's vote on another KIP
-    assert not off_focus("KIP", "KIP:KIP-966", jun, seeds)       # the named KIP itself
-    assert not off_focus("KIP", "KIP:KIP-853", kip, seeds)       # KIP -DEPENDS_ON-> KIP: same type
-    assert not off_focus("Release", "Release:3.9", jun, seeds)   # no Release is named
+    kip, jane = _seed("KIP:KIP-9", "KIP-9"), _seed("Person:jane", "Jane Doe", "exact_name")
+    seeds = [kip, jane]
+    assert off_focus("KIP", "KIP:KIP-5", jane, seeds)          # Jane's vote on another KIP
+    assert not off_focus("KIP", "KIP:KIP-9", jane, seeds)      # the named KIP itself
+    assert not off_focus("KIP", "KIP:KIP-5", kip, seeds)       # KIP -DEPENDS_ON-> KIP: same type
+    assert not off_focus("Release", "Release:3.9", jane, seeds)  # no Release is named
     comp = Seed("Component:x", "Component", "x", "node_search", "q", 0.3)
     assert not off_focus("Component", "Component:y", kip, [kip, comp])  # weak seeds set no focus
 
 
-def test_add_support_keeps_best_path_per_seed():
+def test_add_support_keeps_best_path_per_seed_and_breaks_ties_on_path():
     supports: dict[str, dict[str, Support]] = {}
     add_support(supports, "d1", "A", 0.3, "A -MENTIONS- e")
     add_support(supports, "d1", "A", 0.9, "A -VOTED- p")
     add_support(supports, "d1", "A", 0.5, "A -SENT- e")
-    add_support(supports, "d1", "B", 0.2, "B -MENTIONS- e")
+    add_support(supports, "d1", "B", 0.2, "z")
+    add_support(supports, "d1", "B", 0.2, "a")
+    add_support(supports, "d1", "B", 0.2, "m")
     assert supports["d1"]["A"] == Support(0.9, "A -VOTED- p")
-    assert set(supports["d1"]) == {"A", "B"}
+    assert supports["d1"]["B"] == Support(0.2, "a")
 
 
 def test_minmax():
@@ -150,14 +222,14 @@ def test_rank_docs_rewards_bridging_docs_and_breaks_ties_by_doc_id():
         "d-bridge": {"A": Support(0.6, "p"), "B": Support(0.6, "q")},
         "c-tie": {"A": Support(1.0, "p")},
     }
-    ranked = rank_docs(supports, {}, sem_weight=1.0)
+    ranked = rank_docs(supports, {})
     assert [r.doc_id for r in ranked] == ["d-bridge", "c-tie", "d-one-seed"]
-    assert ranked[0].seeds == ("A", "B")
+    assert ranked[0].seeds == ("A", "B") and ranked[0].via == ("p", "q")
 
 
 def test_rank_docs_semantic_term_reorders():
     supports = {"d1": {"A": Support(1.0, "p")}, "d2": {"A": Support(0.9, "p")}}
-    ranked = rank_docs(supports, {"d1": 0.0, "d2": 1.0}, sem_weight=0.5)
+    ranked = rank_docs(supports, {"d1": 0.0, "d2": 1.0}, DEFAULT_CONFIG.with_(sem_weight=0.5))
     assert [r.doc_id for r in ranked] == ["d2", "d1"]
     assert ranked[0].score == pytest.approx(1.4)
 
@@ -178,6 +250,33 @@ def test_diversify_counts_a_bridging_doc_for_every_seed_it_supports():
     assert [r.doc_id for r in out] == ["ab", "a1", "b1"]
 
 
-def test_diversify_single_seed_is_plain_ranking():
+def test_diversify_single_seed_or_zero_rounds_is_plain_ranking():
     ranked = [_r("x", 3, "A"), _r("y", 2, "A"), _r("z", 1, "C")]
     assert diversify(ranked, ["A"], rounds=3) == ranked
+    two = [_r("a1", 5, "A"), _r("a2", 4, "A"), _r("b1", 1, "B")]
+    assert diversify(two, ["A", "B"], rounds=0) == two
+
+
+# --- ablation helper ----------------------------------------------------------------------
+
+def test_recall_by_type_groups_and_skips_null_questions():
+    from kgrag.retrieve.graph_ablation import format_table, recall_by_type
+    from kgrag.retrieve.types import Evidence, RetrievalResult
+
+    questions = [
+        {"question": "q1", "type": "single_hop", "gold_doc_ids": ["a"]},
+        {"question": "q2", "type": "comparison", "gold_doc_ids": ["b", "c"]},
+        {"question": "q3", "type": "temporal", "gold_doc_ids": ["d"]},
+        {"question": "q4", "type": "null", "gold_doc_ids": []},
+    ]
+    found = {"q1": ["a"], "q2": ["b", "x"], "q3": [], "q4": ["a"]}
+
+    def fake(q, budget):
+        return RetrievalResult(evidence=[Evidence(doc_id=d, text="t", score=1.0) for d in found[q]])
+
+    r = recall_by_type(questions, fake, 100)
+    assert r["single-hop"] == 1.0 and r["comparison"] == 0.5 and r["temporal"] == 0.0
+    assert r["multi-hop"] == pytest.approx(0.25) and r["all"] == pytest.approx(0.5)
+    assert "null" not in r
+    table = format_table({"sys": r})
+    assert "single-hop" in table and "0.25" in table
