@@ -497,3 +497,11 @@ def judge_check(
     if s["labelled"]:
         typer.echo(f"agreement {s['agreement']:.0%}; Cohen's kappa "
                    + ("undefined" if s["kappa"] is None else f"{s['kappa']:.2f}"))
+
+
+@app.command()
+def serve(port: int = typer.Option(8000, "--port", help="Port to listen on.")) -> None:
+    """Run the HTTP API (POST /ask, GET /health)."""
+    import uvicorn
+
+    uvicorn.run("kgrag.api.main:app", host="0.0.0.0", port=port)
