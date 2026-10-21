@@ -24,8 +24,11 @@ graph's 24,376 nodes / 54,127 relationships, use a paid tier.
    `gcloud iam service-accounts create kafka-atlas-run --project PROJECT`, then
    `gcloud projects add-iam-policy-binding PROJECT --member serviceAccount:kafka-atlas-run@PROJECT.iam.gserviceaccount.com --role roles/secretmanager.secretAccessor`
    and the same with `roles/cloudsql.client`.
-7. Locally: `gcloud auth login`, `cloud-sql-proxy`, and `uv`.
+7. Locally: `gcloud auth login`, `cloud-sql-proxy`, `uv`, and a `psql` client >= 16 (e.g. `brew install libpq`).
 8. `models.embed` in `config.yaml` must be a real Voyage model (not `voyage-TBD-...`) before `index` and `/ask` vector search work.
+9. The local docker-compose stack holds the **evaluated state**: ingested, extracted, resolved
+   (`kgrag resolve --resolver user`), built (`kgrag build --resolver user`) and indexed (`kgrag index`).
+   The cloud gets a copy of exactly that; nothing is re-extracted.
 
 ## Commands, in order
 
@@ -33,11 +36,12 @@ graph's 24,376 nodes / 54,127 relationships, use a paid tier.
 export INSTANCE_CONNECTION_NAME=PROJECT:REGION:INSTANCE
 export NEO4J_URI=neo4j+s://XXXX.databases.neo4j.io
 
-# 1. Load data from your laptop (prints the plan and asks first; DRY_RUN=1 to only print).
+# 1. Copy the local evaluated state to Cloud SQL and build the graph in AuraDB
+#    (prints the plan and local row counts, asks first; DRY_RUN=1 to only print).
 #    Enter passwords without them landing in shell history or the process list:
 read -rs -p "Cloud SQL password: " DB_PASS; export DB_PASS; echo
 read -rs -p "AuraDB password: " NEO4J_PASSWORD; export NEO4J_PASSWORD; echo
-FROM=YYYY-MM TO=YYYY-MM scripts/load_cloud.sh PROJECT REGION
+scripts/load_cloud.sh PROJECT REGION
 
 # 2. Build and deploy (SERVICE_ACCOUNT=... recommended) (prints the plan and asks first; DRY_RUN=1 to only print)
 scripts/deploy.sh PROJECT REGION
@@ -52,8 +56,20 @@ curl -s -H "$AUTH" -H "X-API-Key: $KGRAG_API_KEY" -H 'content-type: application/
 Then check the trace appears in Langfuse. When `KGRAG_API_KEY` is set, `/ask` returns 401 without a matching
 `X-API-Key`; `/health` stays open.
 
+What `load_cloud.sh` does: `pg_dump --data-only` of `emails`, `threads`, `jira_events`, `documents`,
+`llm_cache`, `mentions`, `relations`, `resolutions`, `questions` and `evidence_attempts` from the local
+compose Postgres, plus schema and rows of the pgvector tables (`langchain_pg_collection`,
+`langchain_pg_embedding`); it starts the proxy, applies the migrations to Cloud SQL, refuses unless the
+target tables are empty, restores the dump in a single transaction, then runs
+`kgrag build --resolver ${RESOLVER:-user} --yes` against AuraDB. The graph build is deterministic, so the
+restored node-name vectors match it when the local graph was built with the same resolver. It never runs
+`kgrag extract` or `kgrag resolve`, so it costs no Anthropic calls; `REINDEX=1` skips copying the vectors
+and runs `kgrag index` against Cloud SQL instead (Voyage cost). To load again, drop and recreate the
+`kgrag` database (`gcloud sql databases delete kgrag --instance INSTANCE`, then `create`) first.
+
 Overridable env vars: `deploy.sh` takes `MAX_INSTANCES` (default 2), `CONCURRENCY` (10), `DB_USER`/`DB_NAME`
-(`kgrag`), `NEO4J_USER`, `LANGFUSE_HOST`, `REPO`, `SERVICE`, `SERVICE_ACCOUNT`, `NO_API_KEY=1` (drops the key; sets `KGRAG_ALLOW_OPEN=1`; incompatible with `ALLOW_UNAUTHENTICATED=1`). `load_cloud.sh` takes `PROXY_PORT` (5433), `RESOLVER` (`exact`).
+(`kgrag`), `NEO4J_USER`, `LANGFUSE_HOST`, `REPO`, `SERVICE`, `SERVICE_ACCOUNT`, `NO_API_KEY=1` (drops the key; sets `KGRAG_ALLOW_OPEN=1`; incompatible with `ALLOW_UNAUTHENTICATED=1`). `load_cloud.sh` takes `PROXY_PORT` (5433), `RESOLVER` (`user`), `REINDEX` (`0`), `DB_USER`/`DB_NAME`
+(`kgrag`), `LOCAL_SERVICE` (`postgres`), `LOCAL_DB`/`LOCAL_USER` (`kgrag`).
 
 ## Safety defaults
 
@@ -68,7 +84,9 @@ Overridable env vars: `deploy.sh` takes `MAX_INSTANCES` (default 2), `CONCURRENC
 AuraDB Free pauses after inactivity (and deletes instances left paused for long enough). If `/health` returns
 503 with `"neo4j": "unavailable"`, open the Aura console, select the instance and click Resume; wait until it
 is Running, then retry. If it was deleted, recreate it, update `NEO4J_URI` / the `NEO4J_PASSWORD` secret,
-rerun `scripts/load_cloud.sh` (only `build` is needed for the graph) and `scripts/deploy.sh`.
+rebuild only the graph from the Cloud SQL data with the proxy running
+(`KGRAG_PG_DSN=postgresql://kgrag:...@127.0.0.1:5433/kgrag KGRAG_NEO4J_URI=... uv run kgrag build --resolver user --yes`;
+do not rerun `load_cloud.sh`, whose restore needs an empty database), then rerun `scripts/deploy.sh`.
 
 ## Cost notes
 
