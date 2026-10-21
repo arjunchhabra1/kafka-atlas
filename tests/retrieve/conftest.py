@@ -1,14 +1,20 @@
 """Fixtures for the graph-retriever tests: skip (xfail) cleanly while retrieve() is the stub."""
 
+import json
+from pathlib import Path
+
 import pytest
 
 from kgrag.retrieve import graph_retriever
+
+PROBE = json.loads(
+    (Path(__file__).resolve().parents[1] / "fixtures" / "test_queries.json").read_text())["probe"]
 
 
 def graph_retriever_implemented(kg) -> bool:
     """False only if the stub raises NotImplementedError; any other outcome means implemented."""
     try:
-        graph_retriever.retrieve("probe", kg, 100)
+        graph_retriever.retrieve(PROBE, kg, 100)
     except NotImplementedError:
         return False
     except Exception:  # noqa: BLE001 - implemented; the real tests will surface the error

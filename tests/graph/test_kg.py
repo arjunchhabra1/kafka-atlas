@@ -126,3 +126,20 @@ def test_cypher_is_read_only(fixture_kg):
     with pytest.raises(ClientError):
         fixture_kg.cypher("CREATE (:Junk {id: 'junk'})")
     assert fixture_kg.cypher("MATCH (n) RETURN count(n) AS c")[0]["c"] == before
+
+
+def test_search_chunks_warns_on_hits_without_document(fixture_kg, caplog):
+    victim = fixture_kg.search_chunks(TEST_QUERIES["kip_chunks"], k=1)[0].doc_id
+    cur = fixture_kg.conn.execute("select * from documents where doc_id = %s", (victim,))
+    cols, row = [c.name for c in cur.description], cur.fetchone()
+    fixture_kg.conn.execute("delete from documents where doc_id = %s", (victim,))
+    fixture_kg.conn.commit()
+    try:
+        with caplog.at_level("WARNING"):
+            hits = fixture_kg.search_chunks(TEST_QUERIES["kip_chunks"], k=5)
+        assert victim not in {h.doc_id for h in hits}
+        assert "no row in documents" in caplog.text
+    finally:
+        fixture_kg.conn.execute(
+            f"insert into documents ({', '.join(cols)}) values ({', '.join(['%s'] * len(cols))})", row)
+        fixture_kg.conn.commit()

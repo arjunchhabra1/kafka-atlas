@@ -4,6 +4,7 @@ from pathlib import Path
 import pytest
 
 from kgrag.retrieve.embeddings import RecordedEmbeddings
+from kgrag.store.repo import first_document_text
 
 
 def test_recorded_documents_and_queries_are_separate(tmp_path):
@@ -23,7 +24,7 @@ def test_recorded_documents_and_queries_are_separate(tmp_path):
         e.embed_query("unknown")
 
 
-def test_recorded_embeddings_cover_every_test_query():
+def test_recorded_embeddings_cover_every_test_query(slice_conn):
     fixtures = Path(__file__).resolve().parents[1] / "fixtures"
     recorded = fixtures / "recorded_embeddings.json"
     if not recorded.exists():
@@ -31,4 +32,5 @@ def test_recorded_embeddings_cover_every_test_query():
     queries = json.loads(recorded.read_text())["queries"]
     wanted = list(json.loads((fixtures / "test_queries.json").read_text()).values())
     wanted += [q["question"] for q in json.loads((fixtures / "dev_questions.json").read_text())]
+    wanted.append(first_document_text(slice_conn))  # test_vector uses it as a query
     assert [q for q in wanted if q not in queries] == []

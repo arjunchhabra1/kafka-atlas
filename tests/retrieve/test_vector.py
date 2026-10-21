@@ -17,7 +17,7 @@ from kgrag.retrieve.embeddings import (
 )
 from kgrag.retrieve.index import build_index, open_stores
 from kgrag.retrieve.vector import VectorRetriever
-from kgrag.store.repo import get_documents
+from kgrag.store.repo import first_document_text, get_documents
 from kgrag.tokens import count_tokens
 
 FIXTURES = Path(__file__).resolve().parents[1] / "fixtures"
@@ -119,7 +119,9 @@ def test_evidence_text_and_score_order(indexed, slice_conn, dsn, embeddings):
 
 def test_missing_documents_are_reported(indexed, slice_conn, dsn, embeddings, caplog):
     victim = slice_conn.execute("select doc_id from documents order by doc_id limit 1").fetchone()[0]
+    probe = first_document_text(slice_conn)  # scripts/record_embeddings.py records this as a query
     row, cols = _take_row(slice_conn, victim)
+    assert row[cols.index("text")] == probe
     try:
         with open_stores(dsn) as (chunks, _), caplog.at_level("WARNING"):
             res = VectorRetriever(chunks, slice_conn).retrieve(row[cols.index("text")], 4000)

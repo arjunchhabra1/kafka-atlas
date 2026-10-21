@@ -209,6 +209,13 @@ def get_documents(conn: psycopg.Connection, doc_ids: list[str]) -> list[Document
     return [by_id[i] for i in doc_ids if i in by_id]
 
 
+def first_document_text(conn: psycopg.Connection) -> str | None:
+    """Text of the first document by doc_id (the fixture's recorded-embedding query probe)."""
+    row = conn.execute("select text from documents order by doc_id limit 1").fetchone()
+    conn.commit()
+    return row[0] if row else None
+
+
 def log_failure(conn: psycopg.Connection, stage: str, item_id: str, error: str) -> None:
     conn.execute(
         "insert into failures (stage, item_id, error) values (%s, %s, %s)",

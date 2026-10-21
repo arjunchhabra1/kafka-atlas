@@ -26,13 +26,13 @@ def fixture_texts() -> tuple[list[str], list[str]]:
     from kgrag.graph.build import _assemble
     from kgrag.resolve.exact_match import ExactMatchResolver
     from kgrag.resolve.interface import resolve_all
-    from kgrag.store.repo import load_anchor_hints, load_mentions
+    from kgrag.store.repo import first_document_text, load_anchor_hints, load_mentions
 
     recorded = json.loads((FIXTURES / "recorded_extractions.json").read_text())
     with make_fixture.fresh_database(get_settings().pg_dsn, "kgrag_record_embeddings") as conn:
         make_fixture.load_slice(conn, FIXTURES / "dev_slice.mbox", recorded)
         docs = [r[0] for r in conn.execute("select text from documents order by doc_id")]
-        conn_first_doc = docs[0]
+        conn_first_doc = first_document_text(conn)
         resolution = resolve_all(ExactMatchResolver(), load_mentions(conn), load_anchor_hints(conn))
         graph = _assemble(conn, resolution)
     names = [
