@@ -20,7 +20,7 @@ from kgrag.resolve.exact_match import ExactMatchResolver
 from kgrag.resolve.interface import resolve_all
 from kgrag.resolve.resolver import UserResolver
 from kgrag.retrieve import graph_retriever
-from kgrag.retrieve.embeddings import HashEmbeddings, RecordedEmbeddings, set_embeddings_for_tests
+from kgrag.retrieve.embeddings import offline_embeddings, set_embeddings_for_tests
 from kgrag.retrieve.index import build_index, open_stores
 from kgrag.retrieve.vector import VectorRetriever
 from kgrag.store.repo import (
@@ -49,9 +49,7 @@ class FakeLLM:
 
 def test_pipeline_end_to_end(pg_conn, neo4j_driver, tmp_path):
     started = time.perf_counter()
-    set_embeddings_for_tests(RecordedEmbeddings(FIXTURES / "recorded_embeddings.json")
-                             if (FIXTURES / "recorded_embeddings.json").exists()
-                             else HashEmbeddings(dim=64))
+    set_embeddings_for_tests(offline_embeddings(FIXTURES / "recorded_embeddings.json"))
     mf = make_fixture_module()
     i = pg_conn.info
     admin = f"postgresql://{i.user}:{i.password}@{i.host}:{i.port}/{i.dbname}"

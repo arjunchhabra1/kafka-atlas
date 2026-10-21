@@ -67,23 +67,17 @@ def slice_conn(pg_conn):
 def fixture_kg(pg_conn):
     """KnowledgeGraph over the dev slice (exact resolver), in its own database and Neo4j container.
 
-    Uses RecordedEmbeddings when tests/fixtures/recorded_embeddings.json exists, otherwise the
-    deterministic HashEmbeddings (same switch as tests/retrieve/test_vector.py).
+    Uses RecordedEmbeddings when tests/fixtures/recorded_embeddings.json exists and was recorded
+    with models.embed, otherwise the deterministic HashEmbeddings (`offline_embeddings`).
     """
     from testcontainers.community.neo4j import Neo4jContainer
 
     from kgrag.graph.build import build_graph
     from kgrag.graph.kg import KnowledgeGraph
-    from kgrag.retrieve.embeddings import (
-        HashEmbeddings,
-        RecordedEmbeddings,
-        set_embeddings_for_tests,
-    )
+    from kgrag.retrieve.embeddings import offline_embeddings, set_embeddings_for_tests
     from kgrag.retrieve.index import build_index, open_stores
 
-    recorded_path = FIXTURES / "recorded_embeddings.json"
-    set_embeddings_for_tests(
-        RecordedEmbeddings(recorded_path) if recorded_path.exists() else HashEmbeddings(dim=64))
+    set_embeddings_for_tests(offline_embeddings(FIXTURES / "recorded_embeddings.json"))
     mf = make_fixture_module()
     i = pg_conn.info
     admin = f"postgresql://{i.user}:{i.password}@{i.host}:{i.port}/{i.dbname}"

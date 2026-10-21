@@ -13,7 +13,8 @@ from typing import Any
 
 import psycopg
 
-from kgrag.eval.run import RESULTS_DIR, EvalPreconditionError, _check_graph, load_questions
+from kgrag.eval.preflight import EvalPreconditionError, check_freshness
+from kgrag.eval.run import RESULTS_DIR, _check_graph, load_questions
 from kgrag.retrieve.graph_ablation import ablate
 from kgrag.retrieve.graph_config import GraphRetrieverConfig
 
@@ -44,6 +45,7 @@ def run_ablation(
         raise EvalPreconditionError("no graph configs to ablate")
     meta = _check_graph(driver, resolver)
     questions = load_questions(conn, split)
+    check_freshness(conn, driver, questions, system="graph", resolver=resolver, meta=meta)
     rows = [{"question": q.question, "type": q.type, "gold_doc_ids": q.gold_doc_ids}
             for q in questions]
     if not any(r["gold_doc_ids"] for r in rows):

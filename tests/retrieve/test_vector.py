@@ -1,7 +1,7 @@
 """Vector baseline integration tests.
 
-Uses RecordedEmbeddings when tests/fixtures/recorded_embeddings.json exists, otherwise the
-deterministic HashEmbeddings (plumbing only; retrieval quality is asserted weakly).
+Uses RecordedEmbeddings when tests/fixtures/recorded_embeddings.json exists and matches
+models.embed, otherwise the deterministic HashEmbeddings (plumbing only; retrieval quality is asserted weakly).
 """
 
 import json
@@ -13,6 +13,7 @@ from kgrag.graph.build import build_graph
 from kgrag.retrieve.embeddings import (
     HashEmbeddings,
     RecordedEmbeddings,
+    offline_embeddings,
     set_embeddings_for_tests,
 )
 from kgrag.retrieve.index import build_index, open_stores
@@ -43,7 +44,7 @@ class CountingEmbeddings(HashEmbeddings):
 
 @pytest.fixture(scope="module")
 def embeddings():
-    inner = RecordedEmbeddings(RECORDED) if RECORDED.exists() else HashEmbeddings(dim=64)
+    inner = offline_embeddings(RECORDED)
     emb = CountingEmbeddings(inner)
     set_embeddings_for_tests(emb)
     yield emb
@@ -83,7 +84,7 @@ def test_retrieve_returns_gold_for_single_hop(indexed, slice_conn, dsn, embeddin
         got = {e.doc_id for e in res.evidence}
         hit = bool(got & set(q["gold_doc_ids"]))
         hits += hit
-        if RECORDED.exists():
+        if isinstance(embeddings.inner, RecordedEmbeddings):
             assert hit, q["id"]
     print(f"single-hop recall (>=1 gold in results): {hits}/{len(qs)}")
     assert hits > 0

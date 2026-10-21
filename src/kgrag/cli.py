@@ -242,7 +242,7 @@ def build(
 def index() -> None:
     """Embed documents and graph node names into pgvector (only items not yet indexed)."""
     from kgrag.retrieve.embeddings import EmbeddingsNotConfiguredError, get_embeddings
-    from kgrag.retrieve.index import build_index
+    from kgrag.retrieve.index import EmbeddingsModelMismatchError, build_index
 
     try:
         get_embeddings()
@@ -252,7 +252,11 @@ def index() -> None:
     conn, driver = connect(), _neo4j_driver()
     try:
         apply_migrations(conn)
-        stats = build_index(conn, driver)
+        try:
+            stats = build_index(conn, driver)
+        except EmbeddingsModelMismatchError as e:
+            typer.echo(str(e), err=True)
+            raise typer.Exit(1) from None
         for name in ("chunks", "node_names"):
             c = getattr(stats, name)
             typer.echo(f"{name}: {c.added} added, {c.updated} updated, {c.deleted} deleted, "

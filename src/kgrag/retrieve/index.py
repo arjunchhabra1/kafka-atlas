@@ -21,6 +21,10 @@ CHUNKS = "chunks"
 NODE_NAMES = "node_names"
 
 
+class EmbeddingsModelMismatchError(RuntimeError):
+    pass
+
+
 @dataclass(frozen=True)
 class CollectionStats:
     added: int
@@ -124,7 +128,8 @@ def _sync(
     return CollectionStats(added, updated, len(gone), unchanged)
 
 
-def _graph_nodes(driver: Driver) -> list[tuple[str, str, str]]:
+def graph_nodes(driver: Driver) -> list[tuple[str, str, str]]:
+    """(id, label, name) of every named non-Email graph node: what `node_names` indexes."""
     with driver.session() as s:
         rows = s.run(
             "MATCH (n) WHERE NOT n:GraphMeta AND NOT n:Email AND n.name IS NOT NULL "
@@ -138,8 +143,17 @@ def build_index(
     conn: psycopg.Connection, driver: Driver, connection: str | None = None,
     model: str | None = None,
 ) -> IndexStats:
-    """Sync both collections: embed new/changed items (text hash or model differs), drop stale ones."""
+    """Sync both collections: embed new/changed items (text hash or model differs), drop stale ones.
+
+    Refuses to run when the embeddings object reports a different model than the one recorded
+    (e.g. RecordedEmbeddings captured with an older model): its vectors would be mislabelled.
+    """
     model = model or get_settings().models.embed
+    actual = getattr(get_embeddings(), "model", None)
+    if actual is not None and actual != model:
+        raise EmbeddingsModelMismatchError(
+            f"the embeddings in use are {actual!r} but the index would record {model!r}; "
+            "re-record them or set models.embed to match")
     docs = conn.execute("select doc_id, text from documents order by doc_id").fetchall()
     conn.commit()
     with open_stores(connection) as (chunks, node_names):
@@ -147,6 +161,6 @@ def build_index(
             chunks=_sync(conn, chunks, CHUNKS, "doc_id", [(d, t, {}) for d, t in docs], model),
             node_names=_sync(conn, node_names, NODE_NAMES, "node_id", [
                 (nid, name, {"label": label, "name": name})
-                for nid, label, name in _graph_nodes(driver)
+                for nid, label, name in graph_nodes(driver)
             ], model),
         )

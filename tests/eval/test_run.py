@@ -63,7 +63,10 @@ def test_test_split_one_shot(tmp_path):
 
 
 @pytest.fixture
-def eval_conn(pg_conn):
+def eval_conn(pg_conn, monkeypatch):
+    """A fresh database with fake gold doc ids and no index: the freshness preflight (tested in
+    test_preflight.py and the smoke test) is switched off here."""
+    monkeypatch.setattr(run_mod, "check_freshness", lambda *a, **k: None)
     i = pg_conn.info
     admin = f"postgresql://{i.user}:{i.password}@{i.host}:{i.port}/{i.dbname}"
     name = "kgrag_eval_task20"

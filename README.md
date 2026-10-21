@@ -67,7 +67,7 @@ uv run kgrag report results/*.json --split dev
 uv run kgrag serve                         # FastAPI on :8000, POST /ask {"question", "system"}
 ```
 
-The graph holds one resolver at a time: to evaluate `--resolver exact`, rebuild with `kgrag build --resolver exact` first. The test split is one-shot (see Evaluation).
+The graph holds one resolver at a time. Per resolver, **build, then index**: to evaluate `--resolver exact`, run `kgrag build --resolver exact` then `kgrag index` (the node-name index follows the graph), and after re-running `kgrag resolve` rebuild and reindex the same way. `kgrag eval` and `kgrag ablate` run a freshness preflight before any question and refuse, naming the command to run, when a gold document is missing, the `chunks` index was embedded with another model or does not cover every document, the stored resolution changed since the graph was built, or the node-name index does not match the current graph. The test split is one-shot (see Evaluation).
 
 ## How each stage works
 

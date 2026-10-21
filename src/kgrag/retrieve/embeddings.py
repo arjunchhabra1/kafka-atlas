@@ -48,7 +48,7 @@ class RecordedEmbeddings(Embeddings):
     """Replays vectors from scripts/record_embeddings.py: {"model", "documents", "queries"}.
 
     Documents and queries are separate because Voyage embeds them with different input types.
-    Unknown text is an error.
+    Unknown text is an error. `model` is the model the vectors were recorded with.
     """
 
     def __init__(self, path: Path):
@@ -92,3 +92,15 @@ class HashEmbeddings(Embeddings):
 
     def embed_query(self, text: str) -> list[float]:
         return self._vec(text)
+
+
+def offline_embeddings(recorded: Path, model: str | None = None) -> Embeddings:
+    """The tests' stand-in: RecordedEmbeddings when `recorded` exists *and* was recorded with
+    `model` (default models.embed), otherwise HashEmbeddings. A recording made with another
+    model is stale and is not used."""
+    model = model or get_settings().models.embed
+    if Path(recorded).exists():
+        rec = RecordedEmbeddings(recorded)
+        if rec.model == model:
+            return rec
+    return HashEmbeddings(dim=64)

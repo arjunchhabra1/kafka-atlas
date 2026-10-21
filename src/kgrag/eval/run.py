@@ -16,6 +16,7 @@ from kgrag.answer.prompt import ANSWER_PROMPT_VERSION, SYSTEM_PROMPT
 from kgrag.config import CONFIG_PATH, build_hash, get_settings, run_hash
 from kgrag.eval.judge import JUDGE_PROMPT_VERSION, grade
 from kgrag.eval.metrics import full_evidence, source_recall
+from kgrag.eval.preflight import EvalPreconditionError, check_freshness
 from kgrag.graph.build import read_graph_meta
 from kgrag.observability import tag_current_trace, traced
 from kgrag.retrieve.graph_config import (
@@ -33,10 +34,6 @@ DEGRADED_ERROR_RATE = 0.10  # a run with more than this fraction of errored ques
 log = logging.getLogger(__name__)
 
 Retriever = Callable[[str, int], RetrievalResult]
-
-
-class EvalPreconditionError(RuntimeError):
-    """The run cannot start (wrong graph, Neo4j down, stale index, test split already spent)."""
 
 
 def load_questions(conn: psycopg.Connection, split: str) -> list[QuestionRow]:
@@ -215,8 +212,9 @@ def run_eval(
     """Run every kept question of `split` through `system`; returns the results file path.
 
     A run is identified by (system, resolver, graph_config); `graph_config` names an entry of
-    GRAPH_CONFIGS (default "hybrid") and is None for the vector system. Preconditions are
-    checked before any question runs. `retriever`, `answer_llm` and `judge_llm` default to the
+    GRAPH_CONFIGS (default "hybrid") and is None for the vector system. Preconditions (the
+    one-shot rule, the graph's resolver, and the freshness preflight in eval/preflight.py)
+    are checked before any question runs. `retriever`, `answer_llm` and `judge_llm` default to the
     real ones and exist so tests can inject fakes.
     """
     results_dir = results_dir if results_dir is not None else RESULTS_DIR
@@ -238,6 +236,8 @@ def run_eval(
     cfg_part = f"-{graph_config}" if graph_config not in (None, DEFAULT_CONFIG_NAME) else ""
     run_id = f"{system}-{resolver or 'na'}{cfg_part}-{split}-{started:%Y%m%dT%H%M%SZ}"
     questions = load_questions(conn, split)
+    # stale documents/index/graph would silently skew every number: refuse before any question
+    check_freshness(conn, driver, questions, system=system, resolver=resolver, meta=meta)
     if not questions:
         raise EvalPreconditionError(f"no kept/edited questions in split '{split}'")
 
