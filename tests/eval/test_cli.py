@@ -35,3 +35,20 @@ def test_report_cli_errors_cleanly_without_matching_split(tmp_path):
     assert "Traceback" not in result.output
     ok = CliRunner().invoke(app, ["report", "--split", "dev", *map(str, paths)])
     assert ok.exit_code == 0, ok.output
+
+
+def test_eval_cli_validates_graph_config():
+    bad = CliRunner().invoke(app, ["eval", "--system", "graph", "--split", "dev", "--resolver",
+                                   "user", "--graph-config", "nope"])
+    assert bad.exit_code == 2 and "unknown graph config" in bad.output
+    vec = CliRunner().invoke(app, ["eval", "--system", "vector", "--split", "dev",
+                                   "--graph-config", "graph-only"])
+    assert vec.exit_code == 2 and "graph system only" in vec.output
+
+
+def test_report_cli_skips_ablation_files(tmp_path):
+    paths = [_run(tmp_path, "vector", None)]
+    abl = tmp_path / "ablation-20260101T000000Z.json"
+    abl.write_text(json.dumps({"header": {"kind": "ablation"}, "results": {}}))
+    result = CliRunner().invoke(app, ["report", "--split", "dev", *map(str, paths), str(abl)])
+    assert result.exit_code == 0, result.output

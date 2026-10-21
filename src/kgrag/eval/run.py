@@ -18,6 +18,12 @@ from kgrag.eval.judge import JUDGE_PROMPT_VERSION, grade
 from kgrag.eval.metrics import full_evidence, source_recall
 from kgrag.graph.build import read_graph_meta
 from kgrag.observability import tag_current_trace, traced
+from kgrag.retrieve.graph_config import (
+    DEFAULT_CONFIG_NAME,
+    GraphRetrieverConfig,
+    UnknownGraphConfigError,
+    get_graph_config,
+)
 from kgrag.retrieve.types import RetrievalResult
 from kgrag.store.repo import QuestionRow
 from kgrag.tokens import count_tokens
@@ -30,7 +36,7 @@ Retriever = Callable[[str, int], RetrievalResult]
 
 
 class EvalPreconditionError(RuntimeError):
-    """The run cannot start (wrong graph, Neo4j down, test split already spent)."""
+    """The run cannot start (wrong graph, Neo4j down, stale index, test split already spent)."""
 
 
 def load_questions(conn: psycopg.Connection, split: str) -> list[QuestionRow]:
@@ -45,7 +51,26 @@ def load_questions(conn: psycopg.Connection, split: str) -> list[QuestionRow]:
     return rows
 
 
-def _check_one_shot(results_dir: Path, system: str, resolver: str | None) -> None:
+def run_identity(header: dict) -> tuple[str, str | None, str | None]:
+    """(system, resolver, graph_config) of a run header. Graph runs from before graph configs
+    were recorded used the default config."""
+    system = header.get("system")
+    if system != "graph":
+        return system, None, None
+    return system, header.get("resolver"), header.get("graph_config") or DEFAULT_CONFIG_NAME
+
+
+def _read_partial_header(path: Path) -> dict | None:
+    try:
+        with path.open() as f:
+            first = json.loads(f.readline() or "null")
+    except (OSError, json.JSONDecodeError):
+        return None
+    return first.get("header") if isinstance(first, dict) else None
+
+
+def _check_one_shot(results_dir: Path, identity: tuple[str, str | None, str | None]) -> None:
+    label = describe(*identity)
     for path in sorted(results_dir.glob("*.json")):
         try:
             header = json.loads(path.read_text()).get("header", {})
@@ -53,12 +78,27 @@ def _check_one_shot(results_dir: Path, system: str, resolver: str | None) -> Non
             continue
         if header.get("degraded"):
             continue  # a degraded run does not consume the one-shot
-        if (header.get("split") == "test" and header.get("system") == system
-                and header.get("resolver") == resolver):
+        if header.get("split") == "test" and run_identity(header) == identity:
             raise EvalPreconditionError(
-                f"a test-split run for ({system}, {resolver}) already exists ({path.name}); "
+                f"a test-split run for {label} already exists ({path.name}); "
                 "the test split is one-shot (degraded runs do not count). Pass --force to run it again."
             )
+    for path in sorted(results_dir.glob("*.partial.jsonl")):
+        header = _read_partial_header(path)
+        if header and header.get("split") == "test" and run_identity(header) == identity:
+            raise EvalPreconditionError(
+                f"an interrupted test-split run for {label} exists ({path.name}); its answers "
+                "were already produced (and possibly seen), so the test split counts as spent for "
+                "it. Pass --force to run it again, and report that you did."
+            )
+
+
+def describe(system: str, resolver: str | None, graph_config: str | None) -> str:
+    """Human label of a run identity, e.g. `vector`, `graph-user`, `graph-user (graph-only)`."""
+    if system != "graph":
+        return system
+    base = f"graph-{resolver}"
+    return base if graph_config in (None, DEFAULT_CONFIG_NAME) else f"{base} ({graph_config})"
 
 
 def _check_graph(driver: Any, resolver: str | None) -> Any:
@@ -79,7 +119,8 @@ def _check_graph(driver: Any, resolver: str | None) -> Any:
 
 
 @contextmanager
-def _default_retriever(system: str, conn: psycopg.Connection, driver: Any) -> Iterator[Retriever]:
+def _default_retriever(system: str, conn: psycopg.Connection, driver: Any,
+                       config: GraphRetrieverConfig | None) -> Iterator[Retriever]:
     from kgrag.retrieve.index import open_stores
 
     with open_stores() as (chunks, nodes):
@@ -92,7 +133,7 @@ def _default_retriever(system: str, conn: psycopg.Connection, driver: Any) -> It
             from kgrag.retrieve import graph_retriever
 
             kg = KnowledgeGraph(driver, conn, chunks, nodes)
-            yield lambda q, budget: graph_retriever.retrieve(q, kg, budget)
+            yield lambda q, budget: graph_retriever.retrieve(q, kg, budget, config)
 
 
 def _json_safe(value: Any) -> Any:
@@ -130,8 +171,6 @@ def _eval_question(
     try:
         try:
             result = retrieve(q.question, budget)
-        except NotImplementedError:
-            raise  # an unimplemented retriever is not a per-question failure
         except Exception:
             # A failed retrieval counts against the system: nothing retrieved, so recall 0.
             rec["recall"] = source_recall([], q.gold_doc_ids)
@@ -152,10 +191,6 @@ def _eval_question(
         stage = "judge"
         verdict = grade(q.question, q.answer, ans, judge_llm, is_null=q.type == "null")
         rec["verdict"], rec["judge_rationale"] = verdict.verdict, verdict.rationale
-    except NotImplementedError as e:
-        if stage == "retrieve":
-            raise
-        _record_error(rec, conn, q, stage, e)
     except Exception as e:  # noqa: BLE001 - one bad question must not sink the run
         _record_error(rec, conn, q, stage, e)
     if rec["latency_ms"] is None:
@@ -170,6 +205,7 @@ def run_eval(
     system: Literal["vector", "graph"],
     split: Literal["dev", "test"],
     resolver: str | None,
+    graph_config: str | None = None,
     force: bool = False,
     results_dir: Path | None = None,
     retriever: Retriever | None = None,
@@ -178,19 +214,29 @@ def run_eval(
 ) -> Path:
     """Run every kept question of `split` through `system`; returns the results file path.
 
-    Preconditions are checked before any question runs. `retriever`, `answer_llm` and
-    `judge_llm` default to the real ones and exist so tests can inject fakes.
+    A run is identified by (system, resolver, graph_config); `graph_config` names an entry of
+    GRAPH_CONFIGS (default "hybrid") and is None for the vector system. Preconditions are
+    checked before any question runs. `retriever`, `answer_llm` and `judge_llm` default to the
+    real ones and exist so tests can inject fakes.
     """
     results_dir = results_dir if results_dir is not None else RESULTS_DIR
     settings = get_settings()
     if system == "vector":
-        resolver = None
+        resolver, graph_config, config = None, None, None
+    else:
+        graph_config = graph_config or DEFAULT_CONFIG_NAME
+        try:
+            config = get_graph_config(graph_config)
+        except UnknownGraphConfigError as e:
+            raise EvalPreconditionError(str(e)) from None
+    identity = (system, resolver, graph_config)
     if split == "test" and not force:
-        _check_one_shot(results_dir, system, resolver)
+        _check_one_shot(results_dir, identity)
     meta = _check_graph(driver, resolver) if system == "graph" else None
 
     started = datetime.now(UTC)
-    run_id = f"{system}-{resolver or 'na'}-{split}-{started:%Y%m%dT%H%M%SZ}"
+    cfg_part = f"-{graph_config}" if graph_config not in (None, DEFAULT_CONFIG_NAME) else ""
+    run_id = f"{system}-{resolver or 'na'}{cfg_part}-{split}-{started:%Y%m%dT%H%M%SZ}"
     questions = load_questions(conn, split)
     if not questions:
         raise EvalPreconditionError(f"no kept/edited questions in split '{split}'")
@@ -200,13 +246,17 @@ def run_eval(
         if retriever is not None:
             yield retriever
         else:
-            with _default_retriever(system, conn, driver) as r:
+            with _default_retriever(system, conn, driver, config) as r:
                 yield r
 
     results_dir.mkdir(parents=True, exist_ok=True)
     partial = results_dir / f"{run_id}.partial.jsonl"
     records = []
     with retrievers() as retrieve, partial.open("w") as sink:
+        # first line: the identity, so an interrupted test run still counts as spent
+        sink.write(json.dumps({"header": {"run_id": run_id, "system": system, "resolver": resolver,
+                                          "graph_config": graph_config, "split": split}}) + "\n")
+        sink.flush()
         for q in questions:
             rec = _eval_question(
                 q, system=system, run_id=run_id, retrieve=retrieve, conn=conn,
@@ -219,6 +269,8 @@ def run_eval(
     n_errors = sum(r["verdict"] == "error" for r in records)
     header = {
         "run_id": run_id, "system": system, "resolver": resolver, "split": split,
+        "graph_config": graph_config,
+        "graph_config_hash": None if config is None else config.fingerprint(),
         "models": settings.models.model_dump(),
         "prompt_versions": {"answer": ANSWER_PROMPT_VERSION, "judge": JUDGE_PROMPT_VERSION,
                             **settings.prompt_versions},

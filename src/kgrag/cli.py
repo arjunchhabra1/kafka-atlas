@@ -401,10 +401,14 @@ def eval_cmd(
     system: str = typer.Option(..., "--system", help="vector or graph."),
     split: str = typer.Option(..., "--split", help="dev or test."),
     resolver: str | None = typer.Option(None, "--resolver", help="exact or user (graph only)."),
+    graph_config: str | None = typer.Option(
+        None, "--graph-config", help="Named graph-retriever config (graph only): "
+        "hybrid (default) or graph-only."),
     force: bool = typer.Option(False, "--force", help="Re-run a test split already spent."),
 ) -> None:
     """Run the evaluation for one system on one split and write results/<run_id>.json."""
     from kgrag.eval.run import EvalPreconditionError, run_eval
+    from kgrag.retrieve.graph_config import UnknownGraphConfigError, get_graph_config
 
     if system not in ("vector", "graph"):
         raise typer.BadParameter("system must be vector or graph")
@@ -412,19 +416,22 @@ def eval_cmd(
         raise typer.BadParameter("split must be dev or test")
     if system == "graph" and resolver not in ("exact", "user"):
         raise typer.BadParameter("--resolver exact|user is required for the graph system")
+    if system == "vector" and graph_config is not None:
+        raise typer.BadParameter("--graph-config applies to the graph system only")
+    if graph_config is not None:
+        try:
+            get_graph_config(graph_config)
+        except UnknownGraphConfigError as e:
+            raise typer.BadParameter(str(e)) from None
     conn = connect()
     driver = _neo4j_driver() if system == "graph" else None
     try:
         apply_migrations(conn)
         try:
             path = run_eval(conn, driver, system=system, split=split,  # type: ignore[arg-type]
-                            resolver=resolver, force=force)
+                            resolver=resolver, graph_config=graph_config, force=force)
         except EvalPreconditionError as e:
             typer.echo(f"cannot run: {e}", err=True)
-            raise typer.Exit(1) from None
-        except NotImplementedError:
-            typer.echo("graph retrieval not implemented yet: see src/kgrag/retrieve/graph_retriever.py",
-                       err=True)
             raise typer.Exit(1) from None
     finally:
         conn.close()
@@ -441,12 +448,64 @@ def eval_cmd(
 
 
 @app.command()
+def ablate(
+    split: str = typer.Option("dev", "--split", help="Question split: dev (test is refused)."),
+    resolver: str = typer.Option(..., "--resolver", help="exact or user (must match the graph)."),
+    configs: str = typer.Option("hybrid,graph-only", "--configs",
+                                help="Comma-separated graph-config names."),
+    budget: int | None = typer.Option(None, "--budget", help="Token budget (default: budget_tokens)."),
+    vector: bool = typer.Option(True, "--vector/--no-vector", help="Add the vector baseline column."),
+) -> None:
+    """Gold-source recall per question type for each graph config (retrieval only, no LLM calls).
+
+    Prints the table and writes results/ablation-<timestamp>.json.
+    """
+    from kgrag.eval.ablation import run_ablation
+    from kgrag.eval.run import EvalPreconditionError
+    from kgrag.retrieve.graph_ablation import format_table
+    from kgrag.retrieve.graph_config import UnknownGraphConfigError, get_graph_config
+
+    if split == "test":
+        typer.echo("refusing --split test: the ablation tunes the retriever, and tuning on the "
+                   "test split would leak it. Use --split dev.", err=True)
+        raise typer.Exit(2)
+    if split != "dev":
+        raise typer.BadParameter("split must be dev")
+    if resolver not in ("exact", "user"):
+        raise typer.BadParameter("resolver must be one of ['exact', 'user']")
+    names = list(dict.fromkeys(c.strip() for c in configs.split(",") if c.strip()))
+    try:
+        chosen = {n: get_graph_config(n) for n in names}
+    except UnknownGraphConfigError as e:
+        raise typer.BadParameter(str(e)) from None
+    if not chosen:
+        raise typer.BadParameter("--configs names no graph config")
+    budget = budget if budget is not None else get_settings().budget_tokens
+    conn, driver = connect(), _neo4j_driver()
+    try:
+        apply_migrations(conn)
+        try:
+            path, results = run_ablation(conn, driver, split=split, resolver=resolver,
+                                         configs=chosen, budget=budget, vector_baseline=vector)
+        except EvalPreconditionError as e:
+            typer.echo(f"cannot run: {e}", err=True)
+            raise typer.Exit(1) from None
+    finally:
+        conn.close()
+        driver.close()
+    typer.echo(f"gold-source recall within {budget} tokens ({split} split, resolver {resolver})")
+    typer.echo(format_table(results))
+    typer.echo(f"wrote {path}")
+
+
+@app.command()
 def report(
     runs: list[Path] = typer.Argument(..., help="Result files, e.g. results/*.json."),
     trace_examples: int = typer.Option(3, help="Multi-hop disagreement examples to show."),
     split: str = typer.Option("test", "--split", help="Report runs of this split: test or dev."),
 ) -> None:
-    """Print the markdown report for the given results files (judge_check.json is skipped)."""
+    """Print the markdown report for the given results files (judge_check.json and
+    ablation-*.json are skipped)."""
     import json
 
     from kgrag.eval.report import RESULTS_DIR, render_report
@@ -454,7 +513,8 @@ def report(
     if split not in ("dev", "test"):
         raise typer.BadParameter("split must be dev or test")
     paths = [p for p in runs
-             if p.name != "judge_check.json" and not p.name.endswith(".partial.jsonl")]
+             if p.name != "judge_check.json" and not p.name.endswith(".partial.jsonl")
+             and not p.name.startswith("ablation-")]
     try:  # render fully first so a failure never leaves a truncated redirect target half-written
         text = render_report(paths, trace_examples=trace_examples, split=split,
                              judge_check_path=RESULTS_DIR / "judge_check.json")

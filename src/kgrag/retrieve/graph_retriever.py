@@ -12,11 +12,13 @@ The contract
     vector baseline uses, so both systems get the same token budget.
   * Deterministic: the same question on the same graph gives the same evidence. Every sort
     has a doc_id, node id or path tie-break, and scores are rounded.
-  * It never raises on a question with no recognisable entity. It falls back to plain
-    vector search (`kg.search_chunks`) and says so in the trace.
+  * It never raises on a question with no recognisable entity. With `vector_fallback` on it
+    falls back to plain vector search (`kg.search_chunks`); with it off (graph-only) it returns
+    no evidence. Either way the trace says so (`fallback`, `unlinked`).
   * No LLM calls. The question is embedded at most once per call, and that one vector is
     reused for the rerank, the vector backfill or fallback, and the node-name fallback. So
-    cost stays comparable to the baseline.
+    cost stays comparable to the baseline. With every embedding switch off
+    (`GRAPH_ONLY_CONFIG`) it is never embedded.
 
 All knobs live in `GraphRetrieverConfig` (graph_config.py). Booleans switch whole terms off
 for ablations; graph_ablation.py runs those ablations.
@@ -460,12 +462,20 @@ def _switches(config: GraphRetrieverConfig) -> dict[str, bool]:
             if isinstance(getattr(config, f.name), bool)}
 
 
-def _vector_fallback(kg: KnowledgeGraph, budget_tokens: int, trace: dict, reason: str,
-                     qvec: _QuestionVector, clock: _Clock) -> RetrievalResult:
+def _no_graph_evidence(kg: KnowledgeGraph, budget_tokens: int, trace: dict, reason: str,
+                       qvec: _QuestionVector, clock: _Clock,
+                       config: GraphRetrieverConfig) -> RetrievalResult:
+    """Nothing linked, or the seeds reach no evidence: plain vector search when
+    `vector_fallback` is on, otherwise an empty result (graph-only)."""
+    if not config.vector_fallback:
+        trace.update(strategy="empty", fallback_reason=reason, embeddings=qvec.calls,
+                     selected=[], ms=clock.done())
+        return RetrievalResult(evidence=[], trace=trace)
     hits = kg.search_chunks(qvec.question, k=VECTOR_K, embedding=qvec.get())
     evidence = pack_to_budget(hits, budget_tokens)
     clock.lap("vector")
-    trace.update(strategy="vector_fallback", fallback_reason=reason, embeddings=qvec.calls,
+    trace.update(strategy="vector_fallback", fallback=True, fallback_reason=reason,
+                 embeddings=qvec.calls,
                  selected=[{"doc_id": e.doc_id, "score": round(e.score, 6), "source": "vector"}
                            for e in evidence],
                  ms=clock.done())
@@ -487,20 +497,23 @@ def retrieve(question: str, kg: KnowledgeGraph, budget_tokens: int,
              config: GraphRetrieverConfig | None = None) -> RetrievalResult:
     config = config or DEFAULT_CONFIG
     clock, qvec = _Clock(), _QuestionVector(kg, question)
-    linking = link_entities(question, kg, config, embed=qvec.get)
+    linking = link_entities(question, kg, config,
+                            embed=qvec.get if config.node_search else None)
     clock.lap("link")
     trace: dict = {"budget_tokens": budget_tokens, "config": _switches(config),
+                   "unlinked": not linking.seeds, "fallback": False,
                    "linked": [_seed_trace(s) for s in linking.seeds], "dropped": linking.dropped}
     if not linking.seeds:
-        return _vector_fallback(kg, budget_tokens, trace, "no entity linked", qvec, clock)
+        return _no_graph_evidence(kg, budget_tokens, trace, "no entity linked", qvec, clock,
+                                  config)
 
     cues = relation_cues(question)
     w = walk(kg, linking.seeds, cues, config)
     clock.lap("walk")
     trace.update(cues=sorted(cues), bridges=w.bridges, walk=w.stats)
     if not w.supports:
-        return _vector_fallback(kg, budget_tokens, trace, "linked entities have no evidence",
-                                qvec, clock)
+        return _no_graph_evidence(kg, budget_tokens, trace, "linked entities have no evidence",
+                                  qvec, clock, config)
 
     # Rerank: graph score -> top semantic_pool get a similarity (and their text comes back
     # with it) -> top max_candidates are anchored, diversified and packed.

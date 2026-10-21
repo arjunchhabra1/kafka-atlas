@@ -1,8 +1,8 @@
 """Graph vs vector-baseline gold-source recall on the dev questions. Prints a table, asserts nothing.
 
-Rows: graph (hybrid: graph + semantic rerank + vector backfill), graph-only (no embedding
-signal at all) and the vector baseline. xfails while graph_retriever.retrieve is the stub.
-Tune on the fixture/dev split only.
+Columns: hybrid (graph + node-name search + semantic rerank + vector backfill/fallback),
+graph-only (GRAPH_ONLY_CONFIG: no embedding is computed at all; an unlinked question gets no
+evidence) and the vector baseline. Tune on the fixture/dev split only.
 """
 
 import json
@@ -21,9 +21,9 @@ QUESTIONS = json.loads(
 BUDGET = 4000
 
 
-def test_graph_vs_vector_recall(graph_retrieve, fixture_kg, capsys):
+def test_graph_vs_vector_recall(fixture_kg, capsys):
     baseline = VectorRetriever(fixture_kg.chunk_store, fixture_kg.conn)
-    results = ablate(fixture_kg, QUESTIONS, {"graph": DEFAULT_CONFIG, "graph-only": GRAPH_ONLY_CONFIG},
+    results = ablate(fixture_kg, QUESTIONS, {"hybrid": DEFAULT_CONFIG, "graph-only": GRAPH_ONLY_CONFIG},
                      BUDGET, baselines={"vector": baseline.retrieve})
     n = {g: sum(1 for q in QUESTIONS if q["gold_doc_ids"] and q["type"] in types)
          for g, types in GROUPS.items()}

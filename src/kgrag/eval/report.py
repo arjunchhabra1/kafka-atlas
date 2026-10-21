@@ -6,6 +6,7 @@ from pathlib import Path
 from kgrag.config import CONFIG_PATH, get_settings
 from kgrag.eval.judge import VERDICT_SCORE, agreement_stats
 from kgrag.eval.metrics import bootstrap_ci, paired_diff_ci
+from kgrag.eval.run import describe, run_identity
 
 RESULTS_DIR = CONFIG_PATH.parent / "results"  # same anchor as eval.run, independent of cwd
 MULTI_HOP = ("inference", "comparison", "temporal")
@@ -22,7 +23,13 @@ METRICS = [("recall", "Source recall"), ("full_evidence", "Full-evidence rate"),
 
 
 def _label(header: dict) -> str:
-    return "vector" if header["system"] == "vector" else f"graph-{header['resolver']}"
+    """One label per run identity (system, resolver, graph_config), e.g. `graph-user (graph-only)`."""
+    return describe(*run_identity(header))
+
+
+def _order(label: str) -> tuple[int, str]:
+    base = label.split(" ", 1)[0]
+    return (SYSTEM_ORDER.index(base) if base in SYSTEM_ORDER else len(SYSTEM_ORDER), label)
 
 
 def _value(q: dict, metric: str) -> float | None:
@@ -50,9 +57,10 @@ def _diff_cell(a: list[float], b: list[float]) -> str:
 
 
 def _load(run_paths: list[Path], split: str | None) -> tuple[dict[str, dict], list[str]]:
-    """One run per system: the latest non-degraded run of `split` (latest degraded if none).
+    """One run per identity (system, resolver, graph config): the latest non-degraded run of
+    `split` (latest degraded if none).
 
-    Returns (runs ordered vector, graph-exact, graph-user; ids of the runs ignored).
+    Returns (runs ordered vector, graph-exact*, graph-user*; ids of the runs ignored).
     """
     by_label: dict[str, list[dict]] = {}
     for p in run_paths:
@@ -70,8 +78,7 @@ def _load(run_paths: list[Path], split: str | None) -> tuple[dict[str, dict], li
     splits = {r["header"]["split"] for r in runs.values()}
     if len(splits) > 1:
         raise ValueError(f"runs come from different splits: {sorted(splits)}; pass split")
-    ordered = dict(sorted(runs.items(), key=lambda kv: SYSTEM_ORDER.index(kv[0])
-                          if kv[0] in SYSTEM_ORDER else len(SYSTEM_ORDER)))
+    ordered = dict(sorted(runs.items(), key=lambda kv: _order(kv[0])))
     return ordered, sorted(ignored)
 
 

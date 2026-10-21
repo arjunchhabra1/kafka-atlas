@@ -144,3 +144,14 @@ def test_judge_section_notes_unreported_run(tmp_path):
     a = _write(tmp_path, "vector", None, _questions(False))
     (tmp_path / "judge_check.json").write_text(json.dumps({"run_id": "elsewhere", "items": []}))
     assert "not among the runs reported" in render_report([a])
+
+
+def test_graph_configs_are_separate_systems(tmp_path):
+    a = _write(tmp_path, "vector", None, _questions(False))
+    hybrid = _write(tmp_path, "graph", "user", _questions(True), graph_config="hybrid")
+    only = _write(tmp_path, "graph", "user", _questions(False), stamp="y", graph_config="graph-only")
+    old = _write(tmp_path, "graph", "exact", _questions(True), stamp="z")  # no graph_config field
+    md = render_report([only, hybrid, a, old])
+    assert "| Question group | vector | graph-exact | graph-user | graph-user (graph-only) |" in md
+    assert "graph-user (graph-only) minus vector" in md and "graph-user minus vector" in md
+    assert "Ignored runs" not in md  # different configs never supersede each other

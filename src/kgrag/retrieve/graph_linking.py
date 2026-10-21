@@ -13,7 +13,8 @@ comes from GraphRetrieverConfig:
                     first name), so they get a *weak* seed.
   4. `node_search`  Embedding search over node names with the whole question. This is a
                     fallback for lowercase or paraphrased names, used only when nothing else
-                    links, because it is noisy next to precise seeds.
+                    links (it is noisy next to precise seeds) and only when the caller passes
+                    `embed` (the retriever does so only if `config.node_search` is on).
 
 Tiers 1-2 are *strong*: they walk 2 hops, get diversified, anchor text and set the focus.
 Tiers 3-4 are *weak*: they walk 1 hop only. When several nodes share a name, they are ranked

@@ -189,21 +189,6 @@ def test_degraded_flag_when_over_ten_percent_error(eval_conn, tmp_path):
 
 
 @pg
-def test_unimplemented_retriever_aborts_without_results(eval_conn, tmp_path):
-    _seed(eval_conn, [("q1", "single_hop", "dev", ["d1"])])
-
-    def stub(question, budget):
-        raise NotImplementedError
-
-    with pytest.raises(NotImplementedError):
-        run_eval(eval_conn, None, system="vector", split="dev", resolver=None,
-                 results_dir=tmp_path, retriever=stub, answer_llm=FakeLLM(), judge_llm=FakeLLM())
-    assert not list(tmp_path.glob("*.json"))  # no final file...
-    partial = list(tmp_path.glob("*.partial.jsonl"))  # ...but the crash leaves the partial
-    assert len(partial) == 1
-
-
-@pg
 def test_partial_jsonl_written_per_question_and_kept_on_crash(eval_conn, tmp_path):
     _seed(eval_conn, [(f"q{i}", "single_hop", "dev", ["d1"]) for i in range(3)])
 
@@ -216,8 +201,10 @@ def test_partial_jsonl_written_per_question_and_kept_on_crash(eval_conn, tmp_pat
         run_eval(eval_conn, None, system="vector", split="dev", resolver=None,
                  results_dir=tmp_path, retriever=crash_on_third, answer_llm=FakeLLM(),
                  judge_llm=FakeLLM())
-    lines = next(tmp_path.glob("*.partial.jsonl")).read_text().splitlines()
-    assert [json.loads(x)["question_id"] for x in lines] == ["q0", "q1"]
+    assert not list(tmp_path.glob("*.json"))  # no final file...
+    lines = next(tmp_path.glob("*.partial.jsonl")).read_text().splitlines()  # ...but the partial
+    assert json.loads(lines[0])["header"]["system"] == "vector"
+    assert [json.loads(x)["question_id"] for x in lines[1:]] == ["q0", "q1"]
 
 
 @pg
@@ -272,3 +259,67 @@ def test_second_test_run_needs_force(eval_conn, tmp_path):
         run_eval(eval_conn, None, system="vector", **kw)
     assert len(list(tmp_path.glob("*.json"))) == 1
     run_eval(eval_conn, None, system="vector", force=True, **kw)
+
+
+# ---- graph configs as part of the run identity ------------------------------------------
+
+
+def test_unknown_graph_config_is_a_precondition_error(tmp_path, monkeypatch):
+    monkeypatch.setattr(run_mod, "read_graph_meta", lambda d: _meta("user"))
+    with pytest.raises(EvalPreconditionError, match="unknown graph config 'nope'"):
+        run_eval(None, object(), system="graph", split="dev", resolver="user",
+                 graph_config="nope", results_dir=tmp_path)
+    assert list(tmp_path.iterdir()) == []
+
+
+def test_describe_and_identity():
+    assert run_mod.describe("vector", None, None) == "vector"
+    assert run_mod.describe("graph", "user", "hybrid") == "graph-user"
+    assert run_mod.describe("graph", "user", "graph-only") == "graph-user (graph-only)"
+    assert run_mod.run_identity({"system": "graph", "resolver": "exact"}) == ("graph", "exact", "hybrid")
+    assert run_mod.run_identity({"system": "vector", "resolver": None}) == ("vector", None, None)
+
+
+def _no_freshness_checks(monkeypatch):
+    monkeypatch.setattr(run_mod, "read_graph_meta", lambda d: _meta("user"))
+
+
+@pg
+def test_graph_config_is_recorded_and_part_of_the_one_shot_key(eval_conn, tmp_path, monkeypatch):
+    from kgrag.retrieve.graph_config import GRAPH_ONLY_CONFIG
+
+    _no_freshness_checks(monkeypatch)
+    _seed(eval_conn, [("t1", "single_hop", "test", ["d1"])])
+    kw = dict(split="test", resolver="user", results_dir=tmp_path, retriever=retriever,
+              answer_llm=FakeLLM(), judge_llm=FakeLLM())
+    p = run_eval(eval_conn, object(), system="graph", graph_config="graph-only", **kw)
+    h = json.loads(p.read_text())["header"]
+    assert h["graph_config"] == "graph-only"
+    assert h["graph_config_hash"] == GRAPH_ONLY_CONFIG.fingerprint()
+    assert h["run_id"].startswith("graph-user-graph-only-test-")
+    run_eval(eval_conn, object(), system="graph", **kw)  # hybrid is a different run: allowed
+    for cfg in ("graph-only", "hybrid"):
+        with pytest.raises(EvalPreconditionError, match="one-shot"):
+            run_eval(eval_conn, object(), system="graph", graph_config=cfg, **kw)
+    v = run_eval(eval_conn, None, system="vector", **{**kw, "resolver": None})
+    vh = json.loads(v.read_text())["header"]
+    assert vh["graph_config"] is None and vh["graph_config_hash"] is None
+
+
+@pg
+def test_interrupted_test_run_spends_the_one_shot(eval_conn, tmp_path):
+    _seed(eval_conn, [(f"t{i}", "single_hop", "test", ["d1"]) for i in range(2)])
+
+    def crash_on_second(question, budget):
+        if question.endswith("t1"):
+            raise KeyboardInterrupt
+        return retriever(question, budget)
+
+    kw = dict(split="test", resolver=None, results_dir=tmp_path, answer_llm=FakeLLM(),
+              judge_llm=FakeLLM())
+    with pytest.raises(KeyboardInterrupt):
+        run_eval(eval_conn, None, system="vector", retriever=crash_on_second, **kw)
+    assert list(tmp_path.glob("*.partial.jsonl"))
+    with pytest.raises(EvalPreconditionError, match="interrupted.*already"):
+        run_eval(eval_conn, None, system="vector", retriever=retriever, **kw)
+    run_eval(eval_conn, None, system="vector", retriever=retriever, force=True, **kw)

@@ -60,17 +60,36 @@ def test_question_is_embedded_once(fixture_kg, monkeypatch):
     assert len(calls) == 1  # node-search fallback and vector fallback share one embedding
 
 
+def _forbid_embedding(kg, monkeypatch):
+    monkeypatch.setattr(kg, "embed_query", lambda text: pytest.fail("embedded"))
+    monkeypatch.setattr(kg.chunk_store.embeddings, "embed_query",
+                        lambda text: pytest.fail("embedded via the store"))
+
+
 def test_graph_only_config_uses_no_embeddings(fixture_kg, monkeypatch):
-    monkeypatch.setattr(fixture_kg, "embed_query", lambda text: pytest.fail("embedded"))
+    _forbid_embedding(fixture_kg, monkeypatch)
+    assert not GRAPH_ONLY_CONFIG.uses_embeddings and DEFAULT_CONFIG.uses_embeddings
     res = graph_retriever.retrieve("Which KIP received more binding votes, KIP-1032 or KIP-1043?",
                                    fixture_kg, 4000, GRAPH_ONLY_CONFIG)
     assert res.evidence and res.trace["embeddings"] == 0 and res.trace["backfilled"] == 0
     assert all(r["semantic"] == 0.0 for r in res.trace["selected"])
+    assert res.trace["unlinked"] is False and res.trace["fallback"] is False
+
+
+def test_graph_only_unlinkable_question_is_empty_and_never_embeds(fixture_kg, monkeypatch):
+    _forbid_embedding(fixture_kg, monkeypatch)
+    # lowercase, no ids: only the node-name embedding search could link it
+    res = graph_retriever.retrieve("what's a good pizza recipe?", fixture_kg, 4000,
+                                   GRAPH_ONLY_CONFIG)
+    assert res.evidence == []
+    assert res.trace["unlinked"] is True and res.trace["fallback"] is False
+    assert res.trace["strategy"] == "empty" and res.trace["embeddings"] == 0
 
 
 def test_no_entity_question_falls_back_to_vector(graph_retrieve, fixture_kg):
     res = graph_retrieve("What's a good pizza recipe?", 4000)
     assert res.trace["strategy"] == "vector_fallback"
+    assert res.trace["unlinked"] is True and res.trace["fallback"] is True
     assert res.trace["fallback_reason"] == "no entity linked"
     assert [e.doc_id for e in res.evidence] == [
         e.doc_id for e in graph_retriever.pack_to_budget(fixture_kg.search_chunks(

@@ -3,12 +3,17 @@
 `retrieve(question, kg, budget_tokens, config=None)` uses `DEFAULT_CONFIG` unless given
 another. Booleans switch whole scoring terms off for ablations (graph_ablation.py); numbers
 are the values in use. They were set on the dev fixture plus the 5 real-graph questions in
-tests/fixtures/tuning_log.json, and must be re-validated by a dev-split ablation before
-the headline run. Do not tune them on the test split.
+tests/fixtures/tuning_log.json, and must be re-validated by a dev-split ablation
+(`kgrag ablate --split dev`) before the headline run. Do not tune them on the test split.
+
+`GRAPH_CONFIGS` names the configurations a run can select (`kgrag eval --graph-config`);
+each results file records the name and `fingerprint()` of the one it used.
 """
 
+import hashlib
+import json
 from collections.abc import Mapping
-from dataclasses import dataclass, field, replace
+from dataclasses import dataclass, field, fields, replace
 from types import MappingProxyType
 
 # How much an edge of each type says about its endpoints. Facts extracted from the thread
@@ -30,6 +35,8 @@ class GraphRetrieverConfig:
     off_focus: bool = True        # damp seed edges into *other* nodes of a named type
     semantic_rerank: bool = True  # add question-chunk embedding similarity
     vector_backfill: bool = True  # fill leftover budget with plain vector hits
+    vector_fallback: bool = True  # no seed / no graph evidence: answer with plain vector search
+    node_search: bool = True      # link by embedding search over node names (last-resort tier)
     diversify: bool = True        # round-robin the best docs of each strong seed first
 
     # --- walk scoring --------------------------------------------------------------------
@@ -75,7 +82,41 @@ class GraphRetrieverConfig:
     def with_(self, **changes) -> "GraphRetrieverConfig":
         return replace(self, **changes)
 
+    @property
+    def uses_embeddings(self) -> bool:
+        return self.semantic_rerank or self.vector_backfill or self.vector_fallback \
+            or self.node_search
+
+    def fingerprint(self) -> str:
+        """Short stable hash of every field, recorded with each run that uses this config."""
+        values = {f.name: getattr(self, f.name) for f in fields(self)}
+        payload = json.dumps({k: dict(v) if isinstance(v, Mapping) else v
+                              for k, v in values.items()}, sort_keys=True)
+        return hashlib.sha256(payload.encode()).hexdigest()[:12]
+
 
 DEFAULT_CONFIG = GraphRetrieverConfig()
-# The graph alone: no embedding signal at all (no rerank, no vector backfill).
-GRAPH_ONLY_CONFIG = DEFAULT_CONFIG.with_(semantic_rerank=False, vector_backfill=False)
+# The graph alone: every embedding use is off (no rerank, no backfill, no vector fallback, no
+# node-name search). A question that links to no node, or whose seeds reach no evidence,
+# gets an empty result (recall 0) and the trace says so.
+GRAPH_ONLY_CONFIG = DEFAULT_CONFIG.with_(semantic_rerank=False, vector_backfill=False,
+                                         vector_fallback=False, node_search=False)
+
+# Named configurations for `kgrag eval --graph-config` and `kgrag ablate --configs`.
+GRAPH_CONFIGS: Mapping[str, GraphRetrieverConfig] = MappingProxyType({
+    "hybrid": DEFAULT_CONFIG,
+    "graph-only": GRAPH_ONLY_CONFIG,
+})
+DEFAULT_CONFIG_NAME = "hybrid"
+
+
+class UnknownGraphConfigError(ValueError):
+    pass
+
+
+def get_graph_config(name: str) -> GraphRetrieverConfig:
+    try:
+        return GRAPH_CONFIGS[name]
+    except KeyError:
+        raise UnknownGraphConfigError(
+            f"unknown graph config {name!r}; choose one of {', '.join(GRAPH_CONFIGS)}") from None

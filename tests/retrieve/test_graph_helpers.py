@@ -2,6 +2,7 @@
 
 import pytest
 
+from kgrag.retrieve.graph_ablation import evaluate, format_table, recall_by_type
 from kgrag.retrieve.graph_config import DEFAULT_CONFIG, GRAPH_ONLY_CONFIG, GraphRetrieverConfig
 from kgrag.retrieve.graph_linking import (
     NameSpan,
@@ -159,7 +160,22 @@ def test_doc_share_favours_specific_edges():
 
 def test_graph_only_config_has_no_embedding_terms():
     assert not GRAPH_ONLY_CONFIG.semantic_rerank and not GRAPH_ONLY_CONFIG.vector_backfill
+    assert not GRAPH_ONLY_CONFIG.vector_fallback and not GRAPH_ONLY_CONFIG.node_search
+    assert not GRAPH_ONLY_CONFIG.uses_embeddings
     assert GRAPH_ONLY_CONFIG.cues and GraphRetrieverConfig() == DEFAULT_CONFIG
+
+
+def test_graph_config_registry_and_fingerprint():
+    from kgrag.retrieve.graph_config import UnknownGraphConfigError, get_graph_config
+
+    assert get_graph_config("hybrid") is DEFAULT_CONFIG
+    assert get_graph_config("graph-only") is GRAPH_ONLY_CONFIG
+    with pytest.raises(UnknownGraphConfigError, match="unknown graph config 'nope'.*hybrid"):
+        get_graph_config("nope")
+    fp = DEFAULT_CONFIG.fingerprint()
+    assert len(fp) == 12 and fp == GraphRetrieverConfig().fingerprint()
+    assert fp != GRAPH_ONLY_CONFIG.fingerprint()
+    assert fp != DEFAULT_CONFIG.with_(decay=0.4).fingerprint()
 
 
 def _seed(node_id, name, how="id"):
@@ -260,7 +276,6 @@ def test_diversify_single_seed_or_zero_rounds_is_plain_ranking():
 # --- ablation helper ----------------------------------------------------------------------
 
 def test_recall_by_type_groups_and_skips_null_questions():
-    from kgrag.retrieve.graph_ablation import format_table, recall_by_type
     from kgrag.retrieve.types import Evidence, RetrievalResult
 
     questions = [
@@ -278,5 +293,31 @@ def test_recall_by_type_groups_and_skips_null_questions():
     assert r["single-hop"] == 1.0 and r["comparison"] == 0.5 and r["temporal"] == 0.0
     assert r["multi-hop"] == pytest.approx(0.25) and r["all"] == pytest.approx(0.5)
     assert "null" not in r
-    table = format_table({"sys": r})
+    table = format_table({"sys": evaluate(questions, fake, 100)})
     assert "single-hop" in table and "0.25" in table
+
+
+def test_evaluate_reports_unlinked_and_fallback_rates():
+    from kgrag.retrieve.types import Evidence, RetrievalResult
+
+    questions = [{"question": f"q{i}", "type": "single_hop", "gold_doc_ids": ["a"]}
+                 for i in range(4)]
+    traces = {"q0": {"unlinked": True, "fallback": True}, "q1": {"unlinked": True, "fallback": False},
+              "q2": {"unlinked": False, "fallback": False}, "q3": {"unlinked": False}}
+
+    def graph(q, budget):
+        ev = [] if traces[q]["unlinked"] and not traces[q].get("fallback") else \
+            [Evidence(doc_id="a", text="t", score=1.0)]
+        return RetrievalResult(evidence=ev, trace=traces[q])
+
+    def vector(q, budget):
+        return RetrievalResult(evidence=[Evidence(doc_id="a", text="t", score=1.0)])
+
+    g, v = evaluate(questions, graph, 100), evaluate(questions, vector, 100)
+    assert g["unlinked_rate"] == 0.5 and g["fallback_rate"] == 0.25
+    assert g["recall"]["single_hop"] == 0.75 and g["n"]["single_hop"] == 4
+    assert v["unlinked_rate"] is None and v["fallback_rate"] is None
+    table = format_table({"graph-only": g, "vector": v})
+    unlinked = next(line for line in table.splitlines() if line.startswith("unlinked"))
+    assert "50%" in unlinked and unlinked.rstrip().endswith("-")
+    assert "vector fallback" in table and "25%" in table
