@@ -1,4 +1,5 @@
 import functools
+import logging
 import os
 from collections.abc import Callable
 from typing import Any
@@ -36,3 +37,20 @@ def langchain_callbacks() -> list:
     from langfuse.langchain import CallbackHandler
 
     return [CallbackHandler()]
+
+
+def tag_current_trace(**tags: str) -> None:
+    """Tag the active Langfuse trace (e.g. system, question_id, run_id); no-op without keys.
+
+    Tracing is optional, so a tagging failure is logged, never raised.
+    """
+    if not _enabled():
+        return
+    try:
+        from langfuse import get_client
+
+        get_client().update_current_trace(
+            tags=[f"{k}:{v}" for k, v in tags.items()], metadata=dict(tags)
+        )
+    except Exception:  # noqa: BLE001 - observability must not break an eval run
+        logging.getLogger(__name__).warning("could not tag Langfuse trace", exc_info=True)

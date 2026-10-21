@@ -35,3 +35,22 @@ def test_traced_with_keys_returns_value(dummy_keys):
 def test_callbacks_with_keys_returns_one_handler(dummy_keys):
     cbs = langchain_callbacks()
     assert isinstance(cbs, list) and len(cbs) == 1
+
+
+def test_tag_current_trace_noop_without_keys(monkeypatch):
+    from kgrag.observability import tag_current_trace
+
+    monkeypatch.delenv("LANGFUSE_PUBLIC_KEY", raising=False)
+    monkeypatch.delenv("LANGFUSE_SECRET_KEY", raising=False)
+    tag_current_trace(system="vector", question_id="q1", run_id="r1")
+
+
+def test_tag_current_trace_never_raises_with_keys(dummy_keys):
+    from kgrag.observability import tag_current_trace, traced
+
+    @traced("tagged")
+    def f():
+        tag_current_trace(system="vector", question_id="q1", run_id="r1")
+        return 1
+
+    assert f() == 1

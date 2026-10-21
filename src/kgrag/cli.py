@@ -2,6 +2,7 @@ import random
 import sys
 import time
 from collections import Counter
+from pathlib import Path
 from typing import Any
 
 import psycopg
@@ -392,3 +393,93 @@ def questions_split(
             typer.echo(f"warning: {remaining} draft(s) not yet reviewed were ignored", err=True)
     finally:
         conn.close()
+
+
+@app.command("eval")
+def eval_cmd(
+    system: str = typer.Option(..., "--system", help="vector or graph."),
+    split: str = typer.Option(..., "--split", help="dev or test."),
+    resolver: str | None = typer.Option(None, "--resolver", help="exact or user (graph only)."),
+    force: bool = typer.Option(False, "--force", help="Re-run a test split already spent."),
+) -> None:
+    """Run the evaluation for one system on one split and write results/<run_id>.json."""
+    from kgrag.eval.run import EvalPreconditionError, run_eval
+
+    if system not in ("vector", "graph"):
+        raise typer.BadParameter("system must be vector or graph")
+    if split not in ("dev", "test"):
+        raise typer.BadParameter("split must be dev or test")
+    if system == "graph" and resolver not in ("exact", "user"):
+        raise typer.BadParameter("--resolver exact|user is required for the graph system")
+    conn = connect()
+    driver = _neo4j_driver() if system == "graph" else None
+    try:
+        apply_migrations(conn)
+        try:
+            path = run_eval(conn, driver, system=system, split=split,  # type: ignore[arg-type]
+                            resolver=resolver, force=force)
+        except EvalPreconditionError as e:
+            typer.echo(f"cannot run: {e}", err=True)
+            raise typer.Exit(1) from None
+        except NotImplementedError:
+            typer.echo("graph retrieval not implemented yet: see src/kgrag/retrieve/graph_retriever.py",
+                       err=True)
+            raise typer.Exit(1) from None
+    finally:
+        conn.close()
+        if driver is not None:
+            driver.close()
+    import json
+
+    header = json.loads(path.read_text())["header"]
+    typer.echo(f"wrote {path}: {header['n_questions']} questions, {header['n_errors']} errors")
+    if header["degraded"]:
+        typer.echo("WARNING: run is degraded (more than 10% of questions errored)", err=True)
+
+
+@app.command()
+def report(
+    runs: list[Path] = typer.Argument(..., help="Result files, e.g. results/*.json."),
+    trace_examples: int = typer.Option(3, help="Multi-hop disagreement examples to show."),
+) -> None:
+    """Print the markdown report for the given results files (judge_check.json is skipped)."""
+    from kgrag.eval.report import render_report
+
+    paths = [p for p in runs if p.name != "judge_check.json"]
+    typer.echo(render_report(paths, trace_examples=trace_examples))
+
+
+@app.command("judge-check")
+def judge_check(
+    run: str = typer.Option(..., "--run", help="Run id (a file in results/)."),
+    n: int = typer.Option(50, help="Number of judged answers to label."),
+) -> None:
+    """Label a sample of judged answers yourself; prints agreement and Cohen's kappa (resumable)."""
+    from kgrag.eval.judge import LABELS, agreement_stats, run_judge_check
+    from kgrag.eval.run import RESULTS_DIR
+
+    run_path = RESULTS_DIR / f"{run}.json"
+    if not run_path.exists():
+        raise typer.BadParameter(f"no such run: {run_path}")
+    keys = {"c": "correct", "p": "partial", "i": "incorrect"}
+
+    def ask(item: dict) -> str | None:
+        typer.echo(f"\nQuestion: {item['question']}\nGold answer: {item['gold_answer']}\n"
+                   f"System answer: {item['answer']}")
+        while True:
+            key = typer.prompt("[c]orrect / [p]artial / [i]ncorrect / [q]uit").strip().lower()[:1]
+            if key == "q":
+                return None
+            if key in keys:
+                return keys[key]
+
+    try:
+        state = run_judge_check(run_path, RESULTS_DIR / "judge_check.json", n, ask)
+    except ValueError as e:
+        typer.echo(str(e), err=True)
+        raise typer.Exit(1) from None
+    s = agreement_stats(state["items"])
+    typer.echo(f"\nlabelled {s['labelled']} of {s['total']} (labels: {', '.join(LABELS)})")
+    if s["labelled"]:
+        typer.echo(f"agreement {s['agreement']:.0%}; Cohen's kappa "
+                   + ("undefined" if s["kappa"] is None else f"{s['kappa']:.2f}"))
