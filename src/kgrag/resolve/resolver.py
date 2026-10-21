@@ -1,57 +1,70 @@
-"""YOUR TASK: entity resolution for Person and Component mentions.
+"""Entity resolution for Person and Component mentions (`UserResolver`).
 
-The problem
------------
-The extractor emits one mention per occurrence ("Chia-Ping", "Chia-Ping Tsai",
-"chia7712", "MM2", "MirrorMaker 2", ...). Group the mentions that refer to the same
-real-world person or component, and name each group. Everything downstream (the graph,
-retrieval, answers) is built on the entities you produce here.
-
-The contract
-------------
+Contract
+--------
 `resolve(mentions, hints) -> Resolution`
 
-Inputs
-  * `mentions`: only `Person` and `Component` mentions (KIP/JiraTicket/Release are
-    normalized for you by `resolve_all`). Sorted by mention_id. Each has `surface`,
-    `type`, `email_id` and `context`. For header-sourced Person mentions the context is
-    "<sender name> <sender address>"; Jira-sourced ones are Jira display names.
-  * `hints`: `AnchorHints(sender_pairs, jira_actors)` -- distinct (name, address) pairs
-    from email headers and distinct Jira display names. Use them as identity evidence
-    (e.g. the same address behind two name spellings; "Chia-Ping Tsai" in Jira vs a
-    personal address in the mail).
+  * `mentions`: only Person and Component mentions (KIP/JiraTicket/Release are normalized
+    by `resolve_all`). Header mentions (`{email_id}:h0`) have context
+    "<sender name> <sender address>"; Jira mentions (`jira:{event}:a0`) are Jira display
+    names; LLM mentions (`{email_id}:m{n}`) carry the sentence they appear in.
+  * `hints`: distinct (sender_name, sender_address) pairs and distinct Jira display names.
+  * Output: every mention assigned to an entity; every entity has a canonical name and a
+    type. Never merge across types.
+  * Pure (no database, network or LLM), and deterministic even if the input is shuffled.
+  * Two different people who share a first name must never be merged.
 
-Output: `Resolution`
-  * `assignments`: mention_id -> entity_id, for EVERY mention you were given.
-  * `canonical_names`: entity_id -> display name, for EVERY entity.
-  * `entity_types`: entity_id -> "Person" or "Component". Never merge across types.
-  entity_id is any opaque string you like; `resolve_all` prefixes it with the type.
+How it works
+------------
+Components (components.py): each surface is normalized to a key -- case, spaces, hyphens,
+underscores, a leading "the/apache/kafka" word, a ".java" suffix, a package prefix and a
+plural "s" on ordinary words are ignored -- and mentions with the same key are one entity.
+A versioned spelling joins an existing product: "Widget 2.0" -> "Widget2" if present, else
+"Widget 12" -> "Widget" if the bare name occurs. CamelCase class names are
+never stemmed, so `FooExtension` and `FooExtensionContext` stay apart.
 
-Rules
-  * Pure function: no database, network or LLM-cache access, just these two arguments.
-  * Deterministic: the contract test calls resolve() directly on the mentions and on a
-    shuffled copy and requires the same groups, canonical names and types (entity ids may
-    differ); it also runs resolve_all twice and requires identical output.
-  * Be careful with shared first names (two different Davids/Chrises must NOT merge).
+People (people.py, names.py), in two steps:
 
-Check your work
----------------
-    uv run pytest tests/resolve tests/eval/test_bcubed.py -v -s
+1. Identities from strong evidence. A union-find links (a) header names that share an
+   address (except mailing-list relays: "Jane via dev"), (b) any two names with the same
+   normalized full name (accents, case, punctuation, middle initials and common nicknames
+   like Bob/Robert ignored) -- this joins a person's several addresses and their Jira
+   display name -- (c) a header known only as "Jane D." to the single full name
+   "Jane Doe" that fits it, and (d) a name seen only in text to the one participant whose
+   surname it misspells by a single letter ("Jane Doee").
+2. Attach every mention. Header, Jira and full-name mentions go straight to their
+   identity. A first-name-only mention ("Chris", "David A") is resolved from its own
+   email: a sign-off matching the sender -> the sender; a greeting ("Hi Chris") never
+   means the sender; otherwise the one fitting person named in full in the same email,
+   else the one fitting list participant (header sender or Jira user) in the whole corpus
+   (or, if no participant fits, the one fitting person ever named in full). Anything still ambiguous stays a
+   singleton: a missed link costs recall, a wrong merge corrupts the graph.
 
-`test_contract.py` checks the rules above; `test_quality.py` needs B-cubed F1 >= 0.85
-against tests/fixtures/gold_entities.json plus the tagged edge cases (shared first
-names, multi-identity people, variant spellings). Both xfail until this stub stops
-raising NotImplementedError, then run for real. The exact-match baseline is in
-`exact_match.py` for comparison. Try it on the real data with
-`kgrag resolve --resolver user`.
+Canonical names prefer full over abbreviated spellings, then header > Jira > text, then
+the most used spelling. Every loop runs over sorted data, so the output never depends on
+input order or hash order.
 """
 
 from kgrag.extract.schema import AnchorHints, Mention
+from kgrag.resolve.components import group_components
 from kgrag.resolve.interface import Resolution
+from kgrag.resolve.people import resolve_people
 
 
 class UserResolver:
     name = "user"
 
     def resolve(self, mentions: list[Mention], hints: AnchorHints) -> Resolution:
-        raise NotImplementedError("👤 implement entity resolution")
+        """Resolve Person and Component mentions into entities (see module docstring)."""
+        out = Resolution(assignments={}, canonical_names={}, entity_types={})
+        people = [m for m in mentions if m.type == "Person"]
+        components = [m for m in mentions if m.type == "Component"]
+        for etype, groups in (("Person", resolve_people(people, hints)),
+                              ("Component", group_components(components))):
+            for canonical, members in groups:
+                entity_id = f"{etype}:{members[0].mention_id}"  # first member id: unique, stable
+                out.canonical_names[entity_id] = canonical
+                out.entity_types[entity_id] = etype
+                for m in members:
+                    out.assignments[m.mention_id] = entity_id
+        return out
