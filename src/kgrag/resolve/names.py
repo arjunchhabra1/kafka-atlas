@@ -142,6 +142,14 @@ def first_names_compatible(mentioned: str, known: str) -> bool:
     return formal(mentioned) == formal(known)
 
 
+def _bare_name(surface: str) -> str:
+    """The folded name in a surface, without leading fillers: "Hi Jane" -> "jane", "-Jane" -> "jane"."""
+    words = fold(" ".join(surface.split())).strip("-~ ").split()
+    while len(words) > 1 and re.sub(r"\W", "", words[0]) in _LEADING_FILLERS:
+        words = words[1:]
+    return " ".join(words).strip("-~ ")
+
+
 def name_role(context: str, surface: str, surnames: Collection[str] = ()) -> str:
     """How a first name is used in its sentence: "self", "greeting", "other" or "absent".
 
@@ -155,11 +163,12 @@ def name_role(context: str, surface: str, surnames: Collection[str] = ()) -> str
     a greeting or a preposition ("Hi Jane", "as suggested by Jane", "Bo and Jane").
     "absent": the extractor's sentence does not contain the name, so it tells us nothing.
     """
-    name = fold(" ".join(surface.split())).strip("-~ ")
+    name = _bare_name(surface)
     text = fold(context)
-    at = text.rfind(name) if name else -1
-    if at < 0:
+    found = list(re.finditer(rf"(?<!\w){re.escape(name)}(?!\w)", text)) if name else []
+    if not found:
         return "absent"
+    at = found[-1].start()  # the last occurrence: sign-offs come at the end
     before, after = text[:at], text[at + len(name):]
     if before.rstrip().endswith("@"):
         return "other"

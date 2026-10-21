@@ -219,3 +219,9 @@ def test_sender_namesake_mentioned_but_not_signing_needs_local_evidence():
     assert entity_of(ms, "a1:m1")[0] == {"a1:m1"}
     ms.append(llm("a1", 2, "Jane Stone", "On Monday Jane Stone wrote:"))
     assert entity_of(ms, "a1:m1")[0] == {"a2:h0", "a1:m1", "a1:m2"}
+
+
+def test_greeting_in_surface_never_goes_to_namesake_sender():
+    ms = [header("a1", "Jane Brook", "jb@x.example"), header("a2", "Jane Stone", "js@x.example"),
+          llm("a1", 1, "Hi Jane", "Hi Jane,")]
+    assert entity_of(ms, "a1:m1")[0] == {"a2:h0", "a1:m1"}

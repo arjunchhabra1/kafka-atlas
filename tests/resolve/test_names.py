@@ -171,3 +171,12 @@ def test_parse_name_splits_on_dots():
 )
 def test_is_surname_typo(a, b, expected):
     assert is_surname_typo(a, b) is expected
+
+
+def test_name_role_ignores_greeting_inside_the_surface():
+    assert name_role("Hi Jane,", "Hi Jane") == "greeting"
+    assert name_role("Thanks,\nJane", "Thanks Jane") == "self"
+
+
+def test_name_role_matches_whole_words_only():
+    assert name_role("Thanks, Joanne", "Ann") == "absent"
