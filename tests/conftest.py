@@ -108,3 +108,28 @@ def pytest_collection_modifyitems(items):
     for item in items:
         if {"pg_conn", "neo4j_driver", "fixture_kg"} & set(getattr(item, "fixturenames", ())):
             item.add_marker(pytest.mark.integration)
+
+
+SECRET_ENV = ("ANTHROPIC_API_KEY", "VOYAGE_API_KEY", "KGRAG_API_KEY",
+              "LANGFUSE_PUBLIC_KEY", "LANGFUSE_SECRET_KEY", "LANGFUSE_HOST")
+
+
+@pytest.fixture(autouse=True)
+def _isolate_env(monkeypatch):
+    """The project's real .env must never reach os.environ during tests, and no secrets are set
+    by default (tests that need a key set it explicitly). load_env() with an explicit path
+    still works, for the load_env tests."""
+    import kgrag.api.main
+    import kgrag.cli
+    import kgrag.config
+
+    real = kgrag.config.load_env
+
+    def guarded(path=None):
+        if path is not None:
+            real(path)
+
+    for mod in (kgrag.config, kgrag.cli, kgrag.api.main):
+        monkeypatch.setattr(mod, "load_env", guarded)
+    for k in SECRET_ENV:
+        monkeypatch.delenv(k, raising=False)

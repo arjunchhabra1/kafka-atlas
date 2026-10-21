@@ -28,6 +28,9 @@ TEST_QUERIES = json.loads((FIXTURES / "test_queries.json").read_text())
 pytestmark = pytest.mark.integration
 
 
+EDIT_MARKER = " changed"
+
+
 class CountingEmbeddings(HashEmbeddings):
     def __init__(self, inner):
         super().__init__(dim=getattr(inner, "dim", 64))
@@ -38,10 +41,11 @@ class CountingEmbeddings(HashEmbeddings):
         self.docs_embedded += len(texts)
         out = []
         for t in texts:
-            try:
-                out.extend(self.inner.embed_documents([t]))
-            except KeyError:  # recorded vectors can't cover edited text: any same-dim vector will do
-                out.append(next(iter(self.inner.documents.values())))
+            if t.endswith(EDIT_MARKER) and t[: -len(EDIT_MARKER)] in self.inner.documents:
+                # the one edited text test_changed_text_reembeds_only_that_doc creates
+                out.append(self.inner.documents[t[: -len(EDIT_MARKER)]])
+            else:
+                out.extend(self.inner.embed_documents([t]))  # unknown text must raise
         return out
 
     def embed_query(self, text):
@@ -159,7 +163,7 @@ def test_changed_text_reembeds_only_that_doc(indexed, slice_conn, neo4j_driver, 
     doc_id, text = slice_conn.execute("select doc_id, text from documents order by doc_id limit 1").fetchone()
     before = embeddings.docs_embedded
     try:
-        slice_conn.execute("update documents set text = %s where doc_id = %s", (text + " changed", doc_id))
+        slice_conn.execute("update documents set text = %s where doc_id = %s", (text + EDIT_MARKER, doc_id))
         slice_conn.commit()
         stats = build_index(slice_conn, neo4j_driver, connection=dsn)
         assert (stats.chunks.updated, stats.chunks.added, stats.chunks.deleted) == (1, 0, 0)

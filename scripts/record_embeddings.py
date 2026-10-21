@@ -19,18 +19,26 @@ OUT = FIXTURES / "recorded_embeddings.json"
 BATCH = 128
 
 
-def with_retry(fn, *args):
-    """Call fn, sleeping and retrying on provider rate limits."""
+def with_retry(fn, *args, attempts: int = 8, sleep_s: float = 25.0):
+    """Call fn, sleeping and retrying on provider rate limits (voyageai RateLimitError / HTTP 429)."""
     import time
 
-    for attempt in range(8):
+    import httpx
+    from voyageai.error import RateLimitError
+
+    def limited(e: Exception) -> bool:
+        return isinstance(e, RateLimitError) or (
+            isinstance(e, httpx.HTTPStatusError) and e.response.status_code == 429
+        )
+
+    for attempt in range(attempts):
         try:
             return fn(*args)
         except Exception as e:
-            if "RateLimit" not in type(e).__name__:
+            if not limited(e):
                 raise
-            print(f"rate limited; sleeping 25s (attempt {attempt + 1})", flush=True)
-            time.sleep(25)
+            print(f"rate limited; sleeping {sleep_s}s (attempt {attempt + 1})", flush=True)
+            time.sleep(sleep_s)
     raise RuntimeError("still rate limited after retries")
 
 
@@ -84,7 +92,8 @@ def main() -> None:
         todo = [t for t in texts if t not in data[section]]
         for i in range(0, len(todo), BATCH):
             batch = todo[i : i + BATCH]
-            data[section].update(zip(batch, embed(batch) if section == "queries" else with_retry(embed, batch), strict=True))
+            vectors = embed(batch) if section == "queries" else with_retry(embed, batch)
+            data[section].update(zip(batch, vectors, strict=True))
             OUT.write_text(json.dumps(data))  # checkpoint
             print(f"{section}: embedded {min(i + BATCH, len(todo))}/{len(todo)}")
         new += len(todo)

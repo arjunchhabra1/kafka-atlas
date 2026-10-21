@@ -43,6 +43,27 @@ def test_recorded_embeddings_cover_every_test_query(slice_conn):
     assert [q for q in wanted if q not in queries] == []
 
 
+def test_recorded_embeddings_cover_every_document_and_node_name(slice_conn):
+    from kgrag.graph.build import _assemble
+    from kgrag.resolve.exact_match import ExactMatchResolver
+    from kgrag.resolve.interface import resolve_all
+    from kgrag.store.repo import load_anchor_hints, load_mentions
+
+    recorded = Path(__file__).resolve().parents[1] / "fixtures" / "recorded_embeddings.json"
+    if not recorded.exists():
+        pytest.skip("recorded_embeddings.json not recorded yet")
+    if not isinstance(offline_embeddings(recorded), RecordedEmbeddings):
+        pytest.skip("recorded_embeddings.json was recorded with another model (stale)")
+    documents = json.loads(recorded.read_text())["documents"]
+    wanted = [r[0] for r in slice_conn.execute("select text from documents")]
+    graph = _assemble(slice_conn, resolve_all(
+        ExactMatchResolver(), load_mentions(slice_conn), load_anchor_hints(slice_conn)))
+    wanted += [n["name"] for label, nodes in graph.nodes.items() if label != "Email"
+               for n in nodes.values() if n.get("name")]
+    assert len(wanted) > 100
+    assert [t[:60] for t in wanted if t not in documents] == []
+
+
 def _recording(tmp_path, model):
     path = tmp_path / "rec.json"
     path.write_text(json.dumps({"model": model, "documents": {"d": [1.0, 0.0]},
