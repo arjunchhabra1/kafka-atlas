@@ -1,7 +1,4 @@
-"""Entity-resolution quality bars for UserResolver, driven by the gold tags.
-
-These xfail (NotImplementedError) until UserResolver is implemented, then run for real.
-"""
+"""Entity-resolution quality bars for UserResolver, driven by the gold tags."""
 
 import pytest
 

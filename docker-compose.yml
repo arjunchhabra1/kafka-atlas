@@ -5,13 +5,13 @@ services:
       POSTGRES_USER: kgrag
       POSTGRES_PASSWORD: kgrag
       POSTGRES_DB: kgrag
-    ports: ["5432:5432"]
+    ports: ["127.0.0.1:5432:5432"]
     volumes: ["pgdata:/var/lib/postgresql/data"]
   neo4j:
-    image: neo4j:5
+    image: neo4j:5.26
     environment:
       NEO4J_AUTH: neo4j/devpassword
-    ports: ["7474:7474", "7687:7687"]
+    ports: ["127.0.0.1:7474:7474", "127.0.0.1:7687:7687"]
     volumes: ["neo4jdata:/data"]
 volumes:
   pgdata:

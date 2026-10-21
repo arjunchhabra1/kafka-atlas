@@ -216,7 +216,18 @@ def _clear(driver: Driver) -> None:
                   f"FOR (n:{label}) REQUIRE n.id IS UNIQUE").consume()
 
 
+def _check_labels(*labels: str) -> None:
+    """Labels are spliced into Cypher text (they cannot be parameters): allow only the schema's."""
+    bad = sorted(set(labels) - set(NODE_LABELS))
+    if bad:
+        raise ValueError(f"refusing to build: unknown node label(s) {bad}; allowed {NODE_LABELS}")
+
+
 def _load(driver: Driver, g: _Graph) -> None:
+    _check_labels(*g.nodes, *(lab for e in g.edges.values() for lab in (e.src_label, e.dst_label)))
+    unknown_types = sorted({e.type for e in g.edges.values()} - set(EDGE_RULES))
+    if unknown_types:
+        raise ValueError(f"refusing to build: unknown relationship type(s) {unknown_types}")
     with driver.session() as s:
         for label, nodes in g.nodes.items():
             for batch in _batches(sorted(nodes.values(), key=lambda r: r["id"])):

@@ -125,3 +125,13 @@ def test_wipe_guard(monkeypatch):
     with pytest.raises(typer.Exit):
         _guard_wipe(FakeDriver(0, None), "neo4j+s://x.databases.neo4j.io", force=False, yes=False)
     _guard_wipe(FakeDriver(0, None), "neo4j+s://x.databases.neo4j.io", force=False, yes=True)
+
+
+def test_load_refuses_labels_outside_the_schema_before_any_cypher():
+    from kgrag.graph.build import _Graph, _load
+
+    g = _Graph()
+    g.node("Person", "Person:a", name="a")
+    g.node("Person`) DETACH DELETE (n", "x", name="x")  # never spliced into Cypher
+    with pytest.raises(ValueError, match="unknown node label"):
+        _load(None, g)  # raises before opening a session

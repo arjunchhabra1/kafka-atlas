@@ -1,4 +1,5 @@
 from datetime import datetime, timezone
+from pathlib import Path
 
 import psycopg
 import sqlalchemy.exc
@@ -81,10 +82,7 @@ def make_client(**over):
         conns.append(FakeConn())
         return conns[-1]
 
-    def graph_retrieve(question, budget):
-        raise NotImplementedError("stub")
-
-    base = dict(vector_retriever=FakeRetriever(), graph_retrieve=graph_retrieve,
+    base = dict(vector_retriever=FakeRetriever(), graph_retrieve=FakeRetriever().retrieve,
                 answer_fn=fake_answer, conn_factory=conn_factory, neo4j_ping=lambda: None,
                 embeddings_configured=lambda: True)
     base.update(over)
@@ -119,11 +117,19 @@ def test_ask_empty_question_422(q):
     assert client.post("/ask", json={"question": q, "system": "vector"}).status_code == 422
 
 
-def test_ask_graph_not_implemented_501():
+def test_ask_graph_ok():
     client, _ = make_client()
     r = client.post("/ask", json={"question": "q", "system": "graph"})
-    assert r.status_code == 501
-    assert r.json() == {"detail": "graph retrieval not implemented yet"}
+    assert r.status_code == 200 and r.json()["answer"] == "forty-two"
+
+
+def test_ask_notimplemented_is_a_plain_500():
+    def stub(question, budget):
+        raise NotImplementedError("x")
+
+    client, _ = make_client(graph_retrieve=stub)
+    r = client.post("/ask", json={"question": "q", "system": "graph"})
+    assert r.status_code == 500 and r.json() == {"detail": "internal server error"}
 
 
 def test_ask_graph_neo4j_down_503_with_hint():
@@ -396,3 +402,18 @@ def test_docs_available_without_key(monkeypatch):
     monkeypatch.delenv("KGRAG_API_KEY", raising=False)
     client, _ = make_client()
     assert client.get("/openapi.json").status_code == 200
+
+
+def test_serve_binds_loopback_by_default_and_container_opts_in(monkeypatch):
+    import uvicorn
+    from typer.testing import CliRunner
+
+    from kgrag.cli import app as cli_app
+
+    seen = {}
+    monkeypatch.setattr(uvicorn, "run", lambda target, host, port: seen.update(host=host, port=port))
+    monkeypatch.delenv("PORT", raising=False)
+    assert CliRunner().invoke(cli_app, ["serve"]).exit_code == 0
+    assert seen == {"host": "127.0.0.1", "port": 8000}
+    dockerfile = (Path(__file__).resolve().parents[2] / "Dockerfile").read_text()
+    assert 'CMD ["kgrag", "serve", "--host", "0.0.0.0"]' in dockerfile

@@ -154,11 +154,7 @@ def resolve(
         apply_migrations(conn)
         mentions, hints = load_mentions(conn), load_anchor_hints(conn)
         start = time.perf_counter()
-        try:
-            result = resolve_all(resolvers[resolver](), mentions, hints)
-        except NotImplementedError:
-            typer.echo("UserResolver not implemented yet — see src/kgrag/resolve/resolver.py")
-            raise typer.Exit(1) from None
+        result = resolve_all(resolvers[resolver](), mentions, hints)
         elapsed = time.perf_counter() - start
         save_resolution(conn, resolver, result)
         conn.commit()  # save_resolution joins the open transaction; close() would roll it back
@@ -290,14 +286,10 @@ def graph_check(
     if fixture:
         from kgrag.graph.fixture_graph import fixture_graph
 
-        try:
-            with fixture_graph(resolver) as fx_driver:
-                typer.echo("\nfixture graph\n" + format_connectivity(connectivity(fx_driver)))
-                typer.echo("\n" + format_reachability(
-                    reachability(fx_driver, load_dev_questions(), hops)))
-        except NotImplementedError:
-            typer.echo("UserResolver not implemented yet — see src/kgrag/resolve/resolver.py")
-            raise typer.Exit(1) from None
+        with fixture_graph(resolver) as fx_driver:
+            typer.echo("\nfixture graph\n" + format_connectivity(connectivity(fx_driver)))
+            typer.echo("\n" + format_reachability(
+                reachability(fx_driver, load_dev_questions(), hops)))
 
 
 QUESTION_TYPES = ("single_hop", "inference", "comparison", "temporal", "null")
@@ -380,19 +372,29 @@ def questions_review(
 
 @questions_app.command("split")
 def questions_split(
-    force: bool = typer.Option(False, "--force", help="Reassign even if splits already exist."),
+    force: bool = typer.Option(False, "--force", help="Keep existing splits; assign only the "
+                               "kept/edited questions that have none."),
+    reshuffle: bool = typer.Option(False, "--reshuffle", help="Reassign ALL kept/edited "
+                                   "questions (may move dev questions into test: leakage)."),
 ) -> None:
     """Assign kept/edited questions to dev (20%) and test (80%), stratified by type."""
+    if force and reshuffle:
+        raise typer.BadParameter("pass at most one of --force or --reshuffle")
     conn = connect()
     try:
         apply_migrations(conn)
+        if reshuffle:
+            typer.echo("warning: --reshuffle reassigns every kept question; questions already "
+                       "used for dev tuning may land in test (dev/test leakage), and test runs "
+                       "made before are no longer comparable", err=True)
         try:
-            counts = persist_splits(conn, force=force)
+            counts = persist_splits(conn, force=force, reshuffle=reshuffle)
         except AlreadySplitError:
-            typer.echo("Kept questions already have a split; pass --force to reassign.", err=True)
+            typer.echo("Kept questions already have a split; pass --force to assign only the "
+                       "unsplit ones (or --reshuffle to reassign all).", err=True)
             raise typer.Exit(1) from None
         for qtype, c in counts.items():
-            typer.echo(f"{qtype}: dev {c['dev']}, test {c['test']}")
+            typer.echo(f"{qtype}: dev {c['dev']}, test {c['test']} ({c['new']} newly assigned)")
         remaining = conn.execute("select count(*) from questions where status = 'draft'").fetchone()[0]
         if remaining:
             typer.echo(f"warning: {remaining} draft(s) not yet reviewed were ignored", err=True)
@@ -409,9 +411,15 @@ def eval_cmd(
         None, "--graph-config", help="Named graph-retriever config (graph only): "
         "hybrid (default) or graph-only."),
     force: bool = typer.Option(False, "--force", help="Re-run a test split already spent."),
+    yes: bool = typer.Option(False, "--yes", help="Skip the cost-guard confirmation."),
 ) -> None:
     """Run the evaluation for one system on one split and write results/<run_id>.json."""
-    from kgrag.eval.run import EvalPreconditionError, run_eval
+    from kgrag.eval.run import (
+        EvalPreconditionError,
+        estimate_eval_cost_usd,
+        load_questions,
+        run_eval,
+    )
     from kgrag.retrieve.graph_config import UnknownGraphConfigError, get_graph_config
 
     if system not in ("vector", "graph"):
@@ -427,10 +435,27 @@ def eval_cmd(
             get_graph_config(graph_config)
         except UnknownGraphConfigError as e:
             raise typer.BadParameter(str(e)) from None
+    settings = get_settings()
     conn = connect()
     driver = _neo4j_driver() if system == "graph" else None
     try:
         apply_migrations(conn)
+        try:
+            questions = load_questions(conn, split)
+            answer_usd, judge_usd = estimate_eval_cost_usd(questions)
+        except EvalPreconditionError as e:
+            typer.echo(f"cannot run: {e}", err=True)
+            raise typer.Exit(1) from None
+        cost = answer_usd + judge_usd
+        typer.echo(f"{len(questions)} questions; estimated cost ${cost:.2f} (answer "
+                   f"{settings.models.answer} ${answer_usd:.2f}, judge {settings.models.judge} "
+                   f"${judge_usd:.2f}; guard ${settings.cost_guard_usd:.2f})")
+        if cost > settings.cost_guard_usd and not yes:
+            if not sys.stdin.isatty():
+                typer.echo("Estimated cost exceeds the guard; pass --yes to proceed.", err=True)
+                raise typer.Exit(2)
+            if not typer.confirm("Proceed?", default=False):
+                raise typer.Exit(1)
         try:
             path = run_eval(conn, driver, system=system, split=split,  # type: ignore[arg-type]
                             resolver=resolver, graph_config=graph_config, force=force)
@@ -567,7 +592,8 @@ def judge_check(
 @app.command()
 def serve(
     port: int = typer.Option(8000, "--port", envvar="PORT", help="Port to listen on (PORT env honoured)."),
-    host: str = typer.Option("0.0.0.0", "--host", help="Interface to bind."),
+    host: str = typer.Option("127.0.0.1", "--host", help="Interface to bind (0.0.0.0 to "
+                             "listen on every interface, as the container does)."),
 ) -> None:
     """Run the HTTP API (POST /ask, GET /health)."""
     import uvicorn

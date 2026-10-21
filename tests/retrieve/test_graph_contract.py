@@ -1,4 +1,4 @@
-"""Contract for graph_retriever.retrieve. xfails while it is the NotImplementedError stub."""
+"""Contract for graph_retriever.retrieve on the dev-slice graph."""
 
 import json
 from pathlib import Path

@@ -48,6 +48,34 @@ def load_questions(conn: psycopg.Connection, split: str) -> list[QuestionRow]:
     return rows
 
 
+EST_ANSWER_OUTPUT_TOKENS = 400   # answer text + cited ids (structured output)
+EST_JUDGE_OUTPUT_TOKENS = 200    # verdict + rationale
+EST_SCHEMA_TOKENS = 150          # structured-output schema sent with each call
+
+
+def estimate_eval_cost_usd(questions: list[QuestionRow]) -> tuple[float, float]:
+    """(answer, judge) estimated USD for running these questions, with the extraction safety
+    margin. Answer input assumes a full retrieval budget of evidence; null questions are judged
+    by rule (no judge call)."""
+    from kgrag.eval.judge import JUDGE_SYSTEM_PROMPT
+    from kgrag.extract.llm import COST_SAFETY_MARGIN
+
+    s = get_settings()
+    missing = [m for m in (s.models.answer, s.models.judge) if m not in s.pricing]
+    if missing:
+        raise EvalPreconditionError(f"no pricing in config.yaml for {', '.join(missing)}; "
+                                    "cannot estimate the eval cost")
+    a, j = s.pricing[s.models.answer], s.pricing[s.models.judge]
+    answer_in = sum(count_tokens(SYSTEM_PROMPT) + EST_SCHEMA_TOKENS + count_tokens(q.question)
+                    + s.budget_tokens for q in questions)
+    judged = [q for q in questions if q.type != "null"]
+    judge_in = sum(count_tokens(JUDGE_SYSTEM_PROMPT) + EST_SCHEMA_TOKENS + count_tokens(q.question)
+                   + count_tokens(q.answer) + EST_ANSWER_OUTPUT_TOKENS for q in judged)
+    answer = (answer_in * a.input + len(questions) * EST_ANSWER_OUTPUT_TOKENS * a.output) / 1e6
+    judge = (judge_in * j.input + len(judged) * EST_JUDGE_OUTPUT_TOKENS * j.output) / 1e6
+    return answer * COST_SAFETY_MARGIN, judge * COST_SAFETY_MARGIN
+
+
 def run_identity(header: dict) -> tuple[str, str | None, str | None]:
     """(system, resolver, graph_config) of a run header. Graph runs from before graph configs
     were recorded used the default config."""

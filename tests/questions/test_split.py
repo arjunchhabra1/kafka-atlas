@@ -59,13 +59,35 @@ def _load(conn, qs):
 def test_split_refuses_reassign(qdb):
     _load(qdb, _many(10))
     counts = persist_splits(qdb)
-    assert counts["single_hop"] == {"dev": 2, "test": 8}
+    assert counts["single_hop"] == {"dev": 2, "test": 8, "new": 10}
     before = dict(qdb.execute("select id, split from questions").fetchall())
     assert set(before.values()) == {"dev", "test"}
     with pytest.raises(AlreadySplitError):
         persist_splits(qdb)
     persist_splits(qdb, force=True)
     assert dict(qdb.execute("select id, split from questions").fetchall()) == before
+
+
+def test_split_force_assigns_only_unsplit_questions(qdb):
+    _load(qdb, _many(10))
+    persist_splits(qdb)
+    before = dict(qdb.execute("select id, split from questions").fetchall())
+    _load(qdb, [_q(f"single_hop-new{i}") for i in range(10)])
+    counts = persist_splits(qdb, force=True)
+    after = dict(qdb.execute("select id, split from questions").fetchall())
+    assert {k: after[k] for k in before} == before  # nothing moved between dev and test
+    new = [after[f"single_hop-new{i}"] for i in range(10)]
+    assert Counter(new) == {"dev": 2, "test": 8}
+    assert counts["single_hop"] == {"dev": 4, "test": 16, "new": 10}
+    assert counts["inference"]["new"] == 0
+
+
+def test_split_reshuffle_reassigns_all(qdb):
+    _load(qdb, _many(10))
+    qdb.execute("update questions set split = 'test'")
+    qdb.commit()
+    counts = persist_splits(qdb, reshuffle=True)
+    assert counts["single_hop"] == {"dev": 2, "test": 8, "new": 10}
 
 
 def test_split_ignores_drafts_and_clears_dropped(qdb):
@@ -95,4 +117,10 @@ def test_split_cli(qdb, monkeypatch):
     assert "single_hop" in res.output and "1 draft" in res.output
     again = CliRunner().invoke(cli.app, ["questions", "split"])
     assert again.exit_code == 1 and "--force" in again.output
-    assert CliRunner().invoke(cli.app, ["questions", "split", "--force"]).exit_code == 0
+    forced = CliRunner().invoke(cli.app, ["questions", "split", "--force"])
+    assert forced.exit_code == 0 and "(0 newly assigned)" in forced.output
+    assert "leakage" not in forced.output
+    shuffled = CliRunner().invoke(cli.app, ["questions", "split", "--reshuffle"])
+    assert shuffled.exit_code == 0 and "leakage" in shuffled.output
+    both = CliRunner().invoke(cli.app, ["questions", "split", "--force", "--reshuffle"])
+    assert both.exit_code == 2

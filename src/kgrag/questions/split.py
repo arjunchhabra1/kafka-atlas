@@ -32,26 +32,33 @@ def assign_splits(
 
 
 def persist_splits(
-    conn: psycopg.Connection, *, force: bool = False, dev_frac: float = 0.2, seed: int = 13
+    conn: psycopg.Connection, *, force: bool = False, reshuffle: bool = False,
+    dev_frac: float = 0.2, seed: int = 13,
 ) -> dict[str, dict[str, int]]:
-    """Write splits for kept/edited questions; return per-type dev/test counts.
+    """Write splits for kept/edited questions; return per-type dev/test counts of all of them.
 
-    Refuses when any kept/edited question already has a split, unless force. Non-kept rows
-    get their split cleared so a dropped question can never linger in dev or test.
+    Default: refuses when any kept/edited question already has a split. `force`: keeps every
+    existing split and assigns only the kept/edited questions without one (stratified among
+    themselves), so no question ever moves between dev and test. `reshuffle`: reassigns all of
+    them; a question that was tuned on in dev may land in test (leakage), so use it only before
+    any dev work. Non-kept rows get their split cleared so a dropped question can never linger.
     """
     rows = [QuestionRow(**dict(zip(QuestionRow.model_fields, r, strict=True))) for r in conn.execute(
         f"select {', '.join(QuestionRow.model_fields)} from questions").fetchall()]
-    if not force and any(q.split and q.status in KEPT for q in rows):
+    if not (force or reshuffle) and any(q.split and q.status in KEPT for q in rows):
         raise AlreadySplitError("kept questions already have a split")
-    splits = assign_splits(rows, dev_frac, seed)
+    kept_split = {} if reshuffle else {q.id: q.split for q in rows if q.status in KEPT and q.split}
+    splits = assign_splits([q for q in rows if q.id not in kept_split], dev_frac, seed)
     with conn.transaction():
         conn.execute("update questions set split = null where status not in ('kept', 'edited')")
         for qid, split in splits.items():
             conn.execute("update questions set split = %s where id = %s", (split, qid))
     conn.commit()
+    final = {**kept_split, **splits}
     counts: dict[str, dict[str, int]] = {}
     for q in rows:
-        if q.id in splits:
-            c = counts.setdefault(q.type, {"dev": 0, "test": 0})
-            c[splits[q.id]] += 1
+        if q.id in final:
+            c = counts.setdefault(q.type, {"dev": 0, "test": 0, "new": 0})
+            c[final[q.id]] += 1
+            c["new"] += q.id in splits
     return counts

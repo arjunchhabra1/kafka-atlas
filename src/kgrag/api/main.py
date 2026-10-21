@@ -239,8 +239,6 @@ def create_app(deps: Deps | None = None) -> FastAPI:
     def ask(req: AskRequest):
         try:
             return run_ask(req)
-        except NotImplementedError:
-            return JSONResponse({"detail": "graph retrieval not implemented yet"}, status_code=501)
         except NEO4J_ERRORS:
             log.warning("neo4j unavailable during /ask", exc_info=True)
             return _neo4j_down()

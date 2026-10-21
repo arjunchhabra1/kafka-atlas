@@ -9,8 +9,8 @@ from kgrag.resolve.interface import RESOLVER_TYPES, resolve_all
 
 
 @pytest.fixture(params=["exact", "user"])
-def resolver(request, user_resolver_lazy):
-    return ExactMatchResolver() if request.param == "exact" else user_resolver_lazy()
+def resolver(request, user_resolver):
+    return ExactMatchResolver() if request.param == "exact" else user_resolver
 
 
 @pytest.fixture

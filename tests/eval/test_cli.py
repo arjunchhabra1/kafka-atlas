@@ -52,3 +52,56 @@ def test_report_cli_skips_ablation_files(tmp_path):
     abl.write_text(json.dumps({"header": {"kind": "ablation"}, "results": {}}))
     result = CliRunner().invoke(app, ["report", "--split", "dev", *map(str, paths), str(abl)])
     assert result.exit_code == 0, result.output
+
+
+def _eval_cli_fakes(monkeypatch, tmp_path, n=3):
+    from kgrag import cli
+    from kgrag.eval import run as run_mod
+    from kgrag.store.repo import QuestionRow
+
+    class Conn:
+        def close(self):
+            pass
+
+    calls = []
+    qs = [QuestionRow(id=f"q{i}", type="single_hop", question="Who proposed KIP-1?", answer="Jane",
+                      gold_doc_ids=["d"], status="kept", split="dev") for i in range(n)]
+    monkeypatch.setattr(cli, "connect", lambda: Conn())
+    monkeypatch.setattr(cli, "apply_migrations", lambda c: [])
+    monkeypatch.setattr(run_mod, "load_questions", lambda conn, split: qs)
+
+    def fake_run_eval(conn, driver, **kw):
+        calls.append(kw)
+        return _run(tmp_path, "vector", None)
+
+    monkeypatch.setattr(run_mod, "run_eval", fake_run_eval)
+    return calls
+
+
+def test_eval_cli_prints_estimate_and_guards_cost(monkeypatch, tmp_path):
+    from kgrag.eval import run as run_mod
+
+    calls = _eval_cli_fakes(monkeypatch, tmp_path)
+    ok = CliRunner().invoke(app, ["eval", "--system", "vector", "--split", "dev"])
+    assert ok.exit_code == 0, ok.output
+    assert "3 questions; estimated cost $" in ok.output and len(calls) == 1
+    monkeypatch.setattr(run_mod, "estimate_eval_cost_usd", lambda qs: (60.0, 40.0))
+    refused = CliRunner().invoke(app, ["eval", "--system", "vector", "--split", "dev"])
+    assert refused.exit_code == 2 and "pass --yes" in refused.output and len(calls) == 1
+    forced = CliRunner().invoke(app, ["eval", "--system", "vector", "--split", "dev", "--yes"])
+    assert forced.exit_code == 0 and "$100.00" in forced.output and len(calls) == 2
+
+
+def test_estimate_eval_cost_scales_and_skips_judging_null_questions():
+    from kgrag.eval.run import estimate_eval_cost_usd
+    from kgrag.store.repo import QuestionRow
+
+    def q(i, qtype="single_hop"):
+        return QuestionRow(id=f"q{i}", type=qtype, question="Who proposed KIP-1?", answer="Jane",
+                           gold_doc_ids=[], status="kept", split="test")
+
+    a1, j1 = estimate_eval_cost_usd([q(0)])
+    a2, j2 = estimate_eval_cost_usd([q(0), q(1)])
+    assert 0 < a1 and 0 < j1 and a2 == 2 * a1 and j2 == 2 * j1
+    an, jn = estimate_eval_cost_usd([q(0), q(1, "null")])
+    assert an == a2 and jn == j1  # null questions are judged by rule, not by the judge model

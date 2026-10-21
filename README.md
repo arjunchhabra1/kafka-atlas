@@ -53,18 +53,18 @@ uv run kgrag questions draft --pilot       # API cost: 6 questions per type, to 
 uv run kgrag questions review              # HUMAN REVIEW: keep / edit / drop each draft
 uv run kgrag questions draft --counts single_hop=100,inference=55,null=40   # API cost; add other types as needed
 uv run kgrag questions review              # HUMAN REVIEW again for the full set
-uv run kgrag questions split               # 20% dev / 80% test, once
+uv run kgrag questions split               # 20% dev / 80% test, once (--force later splits only new questions)
 
 # Dev-split ablation of the graph retriever (retrieval only, no LLM calls; refuses --split test)
 uv run kgrag ablate --split dev --resolver user --configs hybrid,graph-only
 
-# Evaluation (API cost: answer and judge models per question)
+# Evaluation (API cost: answer and judge models per question; prints an estimate, asks above cost_guard_usd)
 uv run kgrag eval --system vector --split dev
 uv run kgrag eval --system graph --resolver user --split dev                           # hybrid config
 uv run kgrag eval --system graph --resolver user --split dev --graph-config graph-only # no embeddings at all
 uv run kgrag report results/*.json --split dev
 
-uv run kgrag serve                         # FastAPI on :8000, POST /ask {"question", "system"}
+uv run kgrag serve                         # FastAPI on 127.0.0.1:8000, POST /ask {"question", "system"}
 ```
 
 The graph holds one resolver at a time. Per resolver, **build, then index**: to evaluate `--resolver exact`, run `kgrag build --resolver exact` then `kgrag index` (the node-name index follows the graph), and after re-running `kgrag resolve` rebuild and reindex the same way. `kgrag eval` and `kgrag ablate` run a freshness preflight before any question and refuse, naming the command to run, when a gold document is missing, the `chunks` index was embedded with another model or does not cover every document, the stored resolution changed since the graph was built, or the node-name index does not match the current graph. The test split is one-shot (see Evaluation).
