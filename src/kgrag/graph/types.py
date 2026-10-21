@@ -39,3 +39,19 @@ class BuildStats:
     rels: dict[str, int]
     skipped: dict[str, int] = field(default_factory=dict)  # reason -> count of dropped facts
     warnings: list[str] = field(default_factory=list)
+
+
+@dataclass
+class Node:
+    id: str
+    label: str
+    name: str
+    props: dict = field(default_factory=dict)
+
+
+@dataclass
+class Edge:
+    type: str
+    source_id: str
+    target_id: str
+    props: dict = field(default_factory=dict)
