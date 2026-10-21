@@ -2,6 +2,7 @@ import hashlib
 import json
 from functools import lru_cache
 from pathlib import Path
+from typing import Literal
 
 from pydantic import BaseModel
 from pydantic_settings import (
@@ -32,6 +33,7 @@ class Settings(BaseSettings):
         env_prefix="KGRAG_", env_nested_delimiter="__", yaml_file=CONFIG_PATH
     )
 
+    db_mode: Literal["dsn", "cloudsql"] = "dsn"  # cloudsql: connect via the Cloud SQL connector
     pg_dsn: str
     neo4j_uri: str
     neo4j_user: str

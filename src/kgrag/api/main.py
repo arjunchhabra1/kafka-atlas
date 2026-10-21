@@ -1,6 +1,8 @@
 """HTTP service: `POST /ask` (vector or graph system) and `GET /health`."""
 
 import logging
+import os
+import secrets
 import time
 from collections.abc import AsyncIterator, Callable
 from contextlib import ExitStack, asynccontextmanager
@@ -10,7 +12,7 @@ from typing import Any, Literal
 
 import psycopg
 import sqlalchemy.exc
-from fastapi import FastAPI, Request
+from fastapi import Depends, FastAPI, Header, HTTPException, Request
 from fastapi.responses import JSONResponse
 from neo4j.exceptions import ServiceUnavailable, SessionExpired
 from pydantic import BaseModel, Field
@@ -166,6 +168,13 @@ def _postgres_down() -> JSONResponse:
     return JSONResponse({"postgres": "unavailable"}, status_code=503)
 
 
+def require_api_key(x_api_key: str = Header(default="")) -> None:
+    """Optional shared secret: when env KGRAG_API_KEY is set, /ask needs a matching X-API-Key."""
+    expected = os.environ.get("KGRAG_API_KEY")
+    if expected and not secrets.compare_digest(x_api_key.encode(), expected.encode()):
+        raise HTTPException(status_code=401, detail="invalid or missing API key")
+
+
 def create_app(deps: Deps | None = None) -> FastAPI:
     d = deps or default_deps()
 
@@ -204,7 +213,7 @@ def create_app(deps: Deps | None = None) -> FastAPI:
             latency_ms=int((time.perf_counter() - start) * 1000),
         )
 
-    @app.post("/ask", response_model=AskResponse)
+    @app.post("/ask", response_model=AskResponse, dependencies=[Depends(require_api_key)])
     def ask(req: AskRequest):
         try:
             return run_ask(req)

@@ -294,3 +294,47 @@ def test_default_resources_created_once_under_concurrency(monkeypatch):
     [t.join() for t in threads]
     assert calls == {"stores": 1, "driver": 1}
     res.close()
+
+
+def _ask(client, headers=None):
+    return client.post("/ask", json={"question": "q", "system": "vector"}, headers=headers or {})
+
+
+def test_api_key_unset_ask_is_open(monkeypatch):
+    monkeypatch.delenv("KGRAG_API_KEY", raising=False)
+    client, _ = make_client()
+    assert _ask(client).status_code == 200
+
+
+@pytest.mark.parametrize("headers", [{}, {"X-API-Key": "wrong"}, {"X-API-Key": ""}])
+def test_api_key_set_rejects_missing_or_wrong(monkeypatch, headers):
+    monkeypatch.setenv("KGRAG_API_KEY", "s3cret")
+    client, conns = make_client()
+    r = _ask(client, headers)
+    assert r.status_code == 401
+    assert r.json() == {"detail": "invalid or missing API key"}
+    assert conns == []  # rejected before any retrieval or database work
+
+
+def test_api_key_set_accepts_match(monkeypatch):
+    monkeypatch.setenv("KGRAG_API_KEY", "s3cret")
+    client, _ = make_client()
+    assert _ask(client, {"X-API-Key": "s3cret"}).status_code == 200
+
+
+def test_api_key_set_health_stays_open(monkeypatch):
+    monkeypatch.setenv("KGRAG_API_KEY", "s3cret")
+    client, _ = make_client()
+    assert client.get("/health").status_code == 200
+
+
+def test_api_key_compare_is_constant_time(monkeypatch):
+    import kgrag.api.main as m
+
+    monkeypatch.setenv("KGRAG_API_KEY", "s3cret")
+    seen = []
+    real = m.secrets.compare_digest
+    monkeypatch.setattr(m.secrets, "compare_digest", lambda a, b: seen.append((a, b)) or real(a, b))
+    client, _ = make_client()
+    _ask(client, {"X-API-Key": "wrong"})
+    assert seen == [(b"wrong", b"s3cret")]

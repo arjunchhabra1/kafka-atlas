@@ -10,6 +10,7 @@ from langchain_core.documents import Document as LCDocument
 from langchain_postgres import PGVector
 from langchain_postgres.vectorstores import DistanceStrategy
 from neo4j import Driver
+from sqlalchemy import Engine, create_engine
 
 from kgrag.config import get_settings
 from kgrag.observability import traced
@@ -47,11 +48,21 @@ def pgvector_connection(dsn: str | None = None) -> str:
     return f"postgresql+psycopg://{rest}"
 
 
+def store_connection(connection: str | None) -> str | Engine:
+    """What PGVector connects with: a SQLAlchemy URL, or in cloudsql mode an engine whose
+    `creator` is `db.connect` (the Cloud SQL connector), so psycopg and SQLAlchemy share one path."""
+    if connection is None and get_settings().db_mode == "cloudsql":
+        from kgrag.store import db
+
+        return create_engine("postgresql+psycopg://", creator=lambda: db.connect())
+    return pgvector_connection(connection)
+
+
 def _store(collection: str, connection: str | None) -> PGVector:
     return PGVector(
         embeddings=get_embeddings(),
         collection_name=collection,
-        connection=pgvector_connection(connection),
+        connection=store_connection(connection),
         distance_strategy=DistanceStrategy.COSINE,
         use_jsonb=True,
     )
