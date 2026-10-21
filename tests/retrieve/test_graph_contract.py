@@ -1,5 +1,8 @@
 """Contract for graph_retriever.retrieve. xfails while it is the NotImplementedError stub."""
 
+import json
+from pathlib import Path
+
 import pytest
 
 from kgrag.retrieve.types import RetrievalResult
@@ -7,10 +10,9 @@ from kgrag.tokens import count_tokens
 
 pytestmark = pytest.mark.integration
 
-QUESTIONS = [
-    "Who proposed KIP-1043 and which release does it affect?",
-    "Which Jira ticket did Ismael Juma file?",
-]
+TEST_QUERIES = json.loads(
+    (Path(__file__).resolve().parents[1] / "fixtures" / "test_queries.json").read_text())
+QUESTIONS = [TEST_QUERIES["contract_proposer"], TEST_QUERIES["contract_jira"]]
 
 
 def _tokens(res: RetrievalResult) -> int:
@@ -48,6 +50,6 @@ def test_deterministic(graph_retrieve):
 
 
 def test_no_entity_question_returns_valid_result(graph_retrieve):
-    res = graph_retrieve("What's a good pizza recipe?", 4000)
+    res = graph_retrieve(TEST_QUERIES["no_entity"], 4000)
     assert isinstance(res, RetrievalResult)
     assert _tokens(res) <= 4000

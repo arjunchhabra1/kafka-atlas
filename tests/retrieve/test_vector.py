@@ -22,6 +22,7 @@ from kgrag.tokens import count_tokens
 
 FIXTURES = Path(__file__).resolve().parents[1] / "fixtures"
 RECORDED = FIXTURES / "recorded_embeddings.json"
+TEST_QUERIES = json.loads((FIXTURES / "test_queries.json").read_text())
 
 pytestmark = pytest.mark.integration
 
@@ -90,7 +91,7 @@ def test_retrieve_returns_gold_for_single_hop(indexed, slice_conn, dsn, embeddin
 
 def test_retrieve_within_budget(indexed, slice_conn, dsn, embeddings):
     with open_stores(dsn) as (chunks, _):
-        res = VectorRetriever(chunks, slice_conn).retrieve("KIP-1043 consumer groups", 300)
+        res = VectorRetriever(chunks, slice_conn).retrieve(TEST_QUERIES["kip_chunks"], 300)
     assert sum(count_tokens(e.text) for e in res.evidence) <= 300
     assert res.trace["k"] == 50 and res.trace["considered"] >= len(res.evidence)
     assert res.trace["missing"] == 0
@@ -108,7 +109,7 @@ def test_index_incremental(indexed, slice_conn, neo4j_driver, dsn, embeddings):
 
 def test_evidence_text_and_score_order(indexed, slice_conn, dsn, embeddings):
     with open_stores(dsn) as (chunks, _):
-        res = VectorRetriever(chunks, slice_conn).retrieve("KIP-1043 consumer groups", 4000)
+        res = VectorRetriever(chunks, slice_conn).retrieve(TEST_QUERIES["kip_chunks"], 4000)
     assert len(res.evidence) > 1
     scores = [e.score for e in res.evidence]
     assert scores == sorted(scores, reverse=True)
@@ -168,7 +169,7 @@ def test_deleted_doc_is_removed(indexed, slice_conn, neo4j_driver, dsn, embeddin
         stats = build_index(slice_conn, neo4j_driver, connection=dsn)
         assert stats.chunks.deleted == 1 and stats.chunks.total == indexed.chunks.total - 1
         with open_stores(dsn) as (chunks, _):
-            hits = chunks.similarity_search("kafka", k=500)
+            hits = chunks.similarity_search(TEST_QUERIES["vector_scan"], k=500)
         assert victim not in {h.metadata["doc_id"] for h in hits}
     finally:
         _put_row(slice_conn, row, cols)

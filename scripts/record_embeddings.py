@@ -1,4 +1,5 @@
-"""Record embeddings for the dev fixture: document texts, graph node names and dev questions.
+"""Record embeddings for the dev fixture: document texts, graph node names, dev questions and
+tests/fixtures/test_queries.json (every other query the test suite sends).
 
 Run once the embedding model is pinned (`models.embed`) and VOYAGE_API_KEY is set:
     uv run python scripts/record_embeddings.py
@@ -31,6 +32,7 @@ def fixture_texts() -> tuple[list[str], list[str]]:
     with make_fixture.fresh_database(get_settings().pg_dsn, "kgrag_record_embeddings") as conn:
         make_fixture.load_slice(conn, FIXTURES / "dev_slice.mbox", recorded)
         docs = [r[0] for r in conn.execute("select text from documents order by doc_id")]
+        conn_first_doc = docs[0]
         resolution = resolve_all(ExactMatchResolver(), load_mentions(conn), load_anchor_hints(conn))
         graph = _assemble(conn, resolution)
     names = [
@@ -38,7 +40,10 @@ def fixture_texts() -> tuple[list[str], list[str]]:
         for n in nodes.values() if n.get("name")
     ]
     questions = [q["question"] for q in json.loads((FIXTURES / "dev_questions.json").read_text())]
-    return list(dict.fromkeys(docs + names)), list(dict.fromkeys(questions))
+    extra = list(json.loads((FIXTURES / "test_queries.json").read_text()).values())
+    # test_vector's missing-document test uses the first document's text as the query.
+    first = conn_first_doc
+    return list(dict.fromkeys(docs + names)), list(dict.fromkeys(questions + extra + [first]))
 
 
 def main() -> None:

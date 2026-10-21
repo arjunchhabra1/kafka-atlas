@@ -4,6 +4,7 @@ Wraps the Neo4j graph, the Postgres `documents` table and the two pgvector colle
 (`chunks`, `node_names`). It contains no retrieval strategy; that is `retrieve/graph_retriever.py`.
 """
 
+import logging
 from datetime import date, datetime
 from typing import Literal
 
@@ -11,13 +12,14 @@ import psycopg
 from langchain_postgres import PGVector
 from neo4j import Driver
 from neo4j.time import DateTime
-from rapidfuzz import fuzz, process
+from rapidfuzz import fuzz, process, utils
 
 from kgrag.graph.types import Edge, Node
 from kgrag.retrieve.types import Evidence
 from kgrag.store.repo import Document, get_documents
 
 FUZZY_CUTOFF = 80
+log = logging.getLogger(__name__)
 _NOT_ENTITY = "NOT n:GraphMeta AND NOT n:Email"
 
 
@@ -47,6 +49,10 @@ class KnowledgeGraph:
         self.chunk_store, self.node_store = chunk_store, node_store
         self._names: list[tuple[str, str, str]] | None = None  # (id, label, name), entities only
 
+    def refresh(self) -> None:
+        """Drop the fuzzy-name cache; call after the graph is rebuilt under a live KnowledgeGraph."""
+        self._names = None
+
     def _name_cache(self) -> list[tuple[str, str, str]]:
         if self._names is None:
             with self.driver.session() as s:
@@ -72,7 +78,8 @@ class KnowledgeGraph:
                     "RETURN n ORDER BY n.id LIMIT $limit", q=name, label=label, limit=limit)
                 return [_node(r["n"]) for r in rows]
         pool = {i: n for i, lab, n in self._name_cache() if label is None or lab == label}
-        hits = process.extract(name, pool, scorer=fuzz.WRatio, score_cutoff=FUZZY_CUTOFF, limit=limit)
+        hits = process.extract(name, pool, scorer=fuzz.WRatio, score_cutoff=FUZZY_CUTOFF,
+                               processor=utils.default_process, limit=limit)
         nodes = self._fetch_nodes([i for _, _, i in hits])
         return [nodes[i] for _, _, i in hits if i in nodes]
 
@@ -84,7 +91,7 @@ class KnowledgeGraph:
         with self.driver.session() as s:
             rows = s.run(
                 f"MATCH {pattern} WHERE a.id = $id AND ($types IS NULL OR type(r) IN $types) "
-                "RETURN r, b, startNode(r).id AS src, endNode(r).id AS dst ORDER BY b.id, type(r)", id=node_id, types=edge_types)
+                "RETURN r, b, startNode(r).id AS src, endNode(r).id AS dst ORDER BY b.id, type(r), elementId(r)", id=node_id, types=edge_types)
             pairs = [(_edge(r["r"], r["src"], r["dst"]), _node(r["b"])) for r in rows]
         if since is None and until is None:
             return pairs
@@ -106,8 +113,12 @@ class KnowledgeGraph:
         """Entities whose name embeds closest to `query`: (node, similarity), best first."""
         hits = self.node_store.similarity_search_with_score(query, k=k)
         nodes = self._fetch_nodes([d.metadata["node_id"] for d, _ in hits])
-        return [(nodes[d.metadata["node_id"]], 1.0 - dist) for d, dist in hits
-                if d.metadata["node_id"] in nodes]
+        found = [(nodes[d.metadata["node_id"]], 1.0 - dist) for d, dist in hits
+                 if d.metadata["node_id"] in nodes]
+        if len(found) < len(hits):
+            log.warning("%d of %d node-name hits have no node in the graph; reindex?",
+                        len(hits) - len(found), len(hits))
+        return found
 
     def search_chunks(self, query: str, k: int = 20) -> list[Evidence]:
         """Top-k chunks by vector similarity, with their text from `documents`."""
@@ -115,8 +126,12 @@ class KnowledgeGraph:
         ids = [d.metadata["doc_id"] for d, _ in hits]
         text = {d.doc_id: d.text for d in get_documents(self.conn, ids)}
         self.conn.commit()
-        return [Evidence(doc_id=i, text=text[i], score=1.0 - dist)
-                for i, (_, dist) in zip(ids, hits, strict=True) if i in text]
+        found = [Evidence(doc_id=i, text=text[i], score=1.0 - dist)
+                 for i, (_, dist) in zip(ids, hits, strict=True) if i in text]
+        if len(found) < len(hits):
+            log.warning("%d of %d vector hits have no row in documents; reindex?",
+                        len(hits) - len(found), len(hits))
+        return found
 
     def documents(self, doc_ids: list[str]) -> list[Document]:
         docs = get_documents(self.conn, doc_ids)

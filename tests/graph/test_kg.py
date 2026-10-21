@@ -1,6 +1,8 @@
 """KnowledgeGraph toolkit tests, on the dev-slice graph (exact resolver)."""
 
+import json
 from datetime import date
+from pathlib import Path
 
 import pytest
 from neo4j.exceptions import ClientError
@@ -8,6 +10,9 @@ from neo4j.exceptions import ClientError
 from kgrag.retrieve.types import Evidence
 
 pytestmark = pytest.mark.integration
+
+TEST_QUERIES = json.loads(
+    (Path(__file__).resolve().parents[1] / "fixtures" / "test_queries.json").read_text())
 
 
 def test_find_nodes_exact_by_name_and_id(fixture_kg):
@@ -22,6 +27,18 @@ def test_find_nodes_label_filter_and_limit(fixture_kg):
     assert fixture_kg.find_nodes("KIP-848", label="Person") == []
     assert fixture_kg.find_nodes("KIP-848", label="KIP")
     assert len(fixture_kg.find_nodes("Kirk", fuzzy=True, limit=1)) == 1
+
+
+def test_find_nodes_fuzzy_is_case_insensitive(fixture_kg):
+    hits = fixture_kg.find_nodes("cristopher shannon", label="Person", fuzzy=True)
+    assert "Person:christopher shannon" in {n.id for n in hits}
+
+
+def test_refresh_reloads_name_cache(fixture_kg):
+    fixture_kg.find_nodes("x", fuzzy=True)
+    fixture_kg._names = []
+    fixture_kg.refresh()
+    assert fixture_kg.find_nodes("Cristopher Shannon", label="Person", fuzzy=True)
 
 
 def test_find_nodes_fuzzy_finds_misspelled_person(fixture_kg):
@@ -74,7 +91,7 @@ def test_source_docs_exist_in_documents(fixture_kg):
 
 
 def test_search_nodes_returns_nodes_with_scores(fixture_kg):
-    hits = fixture_kg.search_nodes("KIP-1043", k=3)
+    hits = fixture_kg.search_nodes(TEST_QUERIES["kip_name"], k=3)
     assert 0 < len(hits) <= 3
     assert "KIP:KIP-1043" in {n.id for n, _ in hits}
     scores = [s for _, s in hits]
@@ -82,7 +99,7 @@ def test_search_nodes_returns_nodes_with_scores(fixture_kg):
 
 
 def test_search_chunks_returns_evidence_with_stored_text(fixture_kg):
-    hits = fixture_kg.search_chunks("KIP-1043 consumer groups", k=5)
+    hits = fixture_kg.search_chunks(TEST_QUERIES["kip_chunks"], k=5)
     assert 0 < len(hits) <= 5 and all(isinstance(h, Evidence) for h in hits)
     stored = {d.doc_id: d.text for d in fixture_kg.documents([h.doc_id for h in hits])}
     assert all(h.text == stored[h.doc_id] for h in hits)

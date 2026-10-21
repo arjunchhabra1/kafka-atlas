@@ -1,0 +1,8 @@
+{
+  "kip_name": "KIP-1043",
+  "kip_chunks": "KIP-1043 consumer groups",
+  "contract_proposer": "Who proposed KIP-1043 and which release does it affect?",
+  "contract_jira": "Which Jira ticket did Ismael Juma file?",
+  "no_entity": "What's a good pizza recipe?",
+  "vector_scan": "kafka"
+}
