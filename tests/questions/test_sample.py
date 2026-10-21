@@ -1,13 +1,22 @@
 import subprocess
 import sys
 import textwrap
-from datetime import timedelta
+from datetime import UTC, datetime, timedelta
 
 from psycopg.conninfo import make_conninfo
 
 from kgrag.extract.regex_ids import extract_ids
 from kgrag.extract.pipeline import persist_extractions
-from kgrag.questions.sample import _load_docs, _rng, sample_evidence_sets
+from kgrag.questions.sample import (
+    HUMAN_SHARE,
+    _Doc,
+    _load_docs,
+    _rng,
+    _single_hop,
+    is_noisy,
+    related_pairs,
+    sample_evidence_sets,
+)
 from kgrag.store.repo import get_documents
 from kgrag.tokens import count_tokens
 
@@ -29,8 +38,11 @@ def test_sampler_does_not_use_graph(corpus):
         import sys, psycopg
         from kgrag.questions.sample import sample_evidence_sets
         conn = psycopg.connect({dsn!r})
+        n = 0
         for t in {ALL_TYPES!r}:
+            n += len(sample_evidence_sets(conn, t, 5, 1)) if t == "comparison" else 0
             sample_evidence_sets(conn, t, 5, 1)
+        assert n >= 1, "related-pair sampler built nothing"
         print(any(m == "kgrag.graph" or m.startswith("kgrag.graph.") for m in sys.modules))
         print("neo4j" in sys.modules)
         """
@@ -67,8 +79,8 @@ def test_inference_sets_share_id_across_threads(corpus):
     for es in sets:
         assert es.type == "inference"
         assert 2 <= len(es.doc_ids) <= 3
-        ident = es.link.removeprefix("shared:")
-        assert es.link.startswith("shared:")
+        ident = es.link.removeprefix("bridge:")
+        assert es.link.startswith("bridge:")
         docs = _docs(corpus, es)
         assert all(ident.lower().replace("-", " ") in d.text.lower().replace("-", " ")
                    for d in docs)
@@ -83,12 +95,24 @@ def test_inference_sets_share_id_across_threads(corpus):
         assert len(threads) >= 2
 
 
+def test_inference_sets_are_bridges(corpus):
+    """First doc cites the id inside another discussion; the rest are about the id itself."""
+    sets = [es for seed in range(6) for es in sample_evidence_sets(corpus, "inference", 10, seed)]
+    assert {es.link for es in sets} == {"bridge:KIP-100", "bridge:KAFKA-500", "bridge:KAFKA-600"}
+    for es in sets:
+        ident = es.link.removeprefix("bridge:")
+        first, *rest = _docs(corpus, es)
+        assert ident.lower() not in first.subject.lower()
+        assert all(ident.lower() in d.subject.lower() for d in rest)
+        assert ident in es.hint and "different discussion" in es.hint
+
+
 def test_comparison_sets_two_distinct_ids(corpus):
     sets = sample_evidence_sets(corpus, "comparison", 10, 3)
     assert sets
     for es in sets:
-        assert es.link.startswith("compare:")
-        a, b = es.link.removeprefix("compare:").split("|")
+        assert es.link.startswith("related:")
+        a, b = es.link.removeprefix("related:").split("|")
         assert a != b
         assert a.split("-")[0] == b.split("-")[0]  # same kind
         d1, d2 = _docs(corpus, es)
@@ -185,3 +209,55 @@ def test_iter_exhausts_and_never_repeats(corpus):
         sets = list(iter_evidence_sets(corpus, t, 4))
         keys = [frozenset(e.doc_ids) or e.link for e in sets]
         assert len(keys) == len(set(keys)) and sets
+
+
+def test_comparison_only_pairs_related_items(corpus):
+    # KIP-100 / KIP-200 are mentioned together (e5); KAFKA-500 / KAFKA-600 are unrelated.
+    sets = [es for seed in range(6) for es in sample_evidence_sets(corpus, "comparison", 10, seed)]
+    assert sets and {es.link for es in sets} == {"related:KIP-100|KIP-200"}
+    assert all("mentioned together" in es.hint for es in sets)
+    assert not any("email:e5:0" in es.doc_ids for es in sets)  # it names both sides
+
+
+def _doc(i, kind="email", title="", about=()):
+    return _Doc(f"{kind}:{i}", kind, str(i), f"t{i}", datetime(2026, 1, 1, tzinfo=UTC),
+                frozenset(about), frozenset(about), title)
+
+
+def test_related_pairs_by_title_words_and_release():
+    docs = [
+        _doc(1, "jira", "KAFKA-1 ShareConsumer acknowledgement timeout", about=["KAFKA-1"]),
+        _doc(2, "jira", "KAFKA-2 share consumer acknowledgement batching", about=["KAFKA-2"]),
+        _doc(3, "jira", "KAFKA-3 RocksDB metrics recording", about=["KAFKA-3"]),
+        _doc(4, "jira", "KAFKA-4 metrics for remote storage", about=["KAFKA-4"]),
+        _doc(5, "jira", "KAFKA-5 metrics for the controller", about=["KAFKA-5"]),
+        _doc(6, "email", "[DISCUSS] KIP-7: tiered storage quotas", about=["KIP-7"]),
+    ]
+    pairs = related_pairs(docs, {"KAFKA-3": "4.0.0", "KAFKA-4": "4.0.0", "KAFKA-5": "3.9.0"})
+    assert pairs[("KAFKA-1", "KAFKA-2")].startswith("same topic")  # share, consumer, ack...
+    assert pairs[("KAFKA-3", "KAFKA-4")].startswith("both fixed in 4.0.0")  # metrics + release
+    assert ("KAFKA-3", "KAFKA-5") not in pairs and ("KAFKA-4", "KAFKA-5") not in pairs
+    assert not any("KIP-7" in p for p in pairs)  # never pairs across kinds
+
+
+def test_noisy_chunks_detected():
+    assert is_noisy("[stack trace: TimeoutException in Foo]\n[log: 40 lines]\nIt failed again.")
+    assert is_noisy("ducktape.errors.TimeoutError: worker3 timed out after 600 seconds\n"
+                    "  at org.apache.kafka.Foo.bar(Foo.java:1)\nsee above")
+    assert not is_noisy("I've run several ducktape builds.\nAll passed.\nThe RC looks good.\n"
+                        "Docs are fine.\n+1 (binding)")
+
+
+def test_noisy_chunks_never_sampled(corpus):
+    pad = "word " * 50
+    _add_email(corpus, "e12", "t11", [f"{pad}\n[stack trace: IOError in Log]\n[log: 80 lines]"])
+    corpus.commit()
+    assert "email:e12:0" not in {d.doc_id for d in _load_docs(corpus)}
+
+
+def test_single_hop_jira_share_is_small():
+    assert HUMAN_SHARE == 0.85
+    docs = [_doc(i, "email") for i in range(300)] + [_doc(i, "jira") for i in range(300, 600)]
+    picked = [es.doc_ids[0] for es, _ in zip(_single_hop(docs, _rng(1, "single_hop")), range(200))]
+    share = sum(p.startswith("jira:") for p in picked) / len(picked)
+    assert 0.08 <= share <= 0.22

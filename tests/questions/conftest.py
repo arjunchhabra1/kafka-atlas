@@ -28,14 +28,22 @@ EMAILS = [
     ("e2", "t2", day(1, 20), f"Update on kip 100 after review. {FILLER}"),
     ("e3", "t3", day(2, 10), f"Vote result for KIP-100. {FILLER}"),
     ("e4", "t4", day(1, 5), f"Discussion of KIP-200 design. {FILLER}"),
-    ("e5", "t5", day(1, 6), f"More on KIP-200 compatibility. {FILLER}"),
-    ("e6", "t6", day(1, 7), f"Regression tracked in KAFKA-500. {FILLER}"),
+    ("e5", "t5", day(1, 6), f"More on KIP-200 compatibility, which builds on KIP-100. {FILLER}"),
+    ("e6", "t6", day(1, 7), f"Regression tracked in KAFKA-500, found in the KIP-100 review. {FILLER}"),
     ("e7", "t7", day(1, 8), f"Flaky test KAFKA-600 again. {FILLER}"),
     ("e8", "t8", day(1, 9), f"Cleaning up KAFKA-700 follow-ups. {FILLER}"),
     ("e9", "t1", day(1, 2), f"Second note on KIP-100 in the same thread. {FILLER}"),
     ("e10", "t9", day(3, 1), "Short note."),
 ]
-THREAD_SUBJECTS = {f"t{i}": f"[DISCUSS] topic {i}" for i in range(1, 10)}
+# Threads t1-t5 are ABOUT a KIP (id in the subject); e5 relates KIP-200 to KIP-100, and e6 / e7
+# cite KIP-100 and the Jira tickets from discussions about something else (bridges).
+THREAD_SUBJECTS = {f"t{i}": f"[DISCUSS] topic {i}" for i in range(1, 10)} | {
+    "t1": "[DISCUSS] topic 1 KIP-100: broker protocol",
+    "t2": "Re: [DISCUSS] topic 2 KIP-100",
+    "t3": "[VOTE] topic 3 KIP-100",
+    "t4": "[DISCUSS] topic 4 KIP-200: compatibility",
+    "t5": "Re: [DISCUSS] topic 5 KIP-200: compatibility",
+}
 JIRA = [  # (ticket, date)
     ("KAFKA-500", day(2, 20)),
     ("KAFKA-600", day(1, 9)),
