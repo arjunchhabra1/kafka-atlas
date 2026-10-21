@@ -81,9 +81,41 @@ def _refuse_dev_defaults(s: Settings) -> None:
         raise ValueError("cloudsql mode: neo4j_uri points at localhost; set KGRAG_NEO4J_URI")
 
 
-def config_hash(s: Settings) -> str:
-    payload = json.dumps(s.model_dump(mode="json"), sort_keys=True)
-    return hashlib.sha256(payload.encode()).hexdigest()[:12]
+def _digest(payload: dict) -> str:
+    return hashlib.sha256(json.dumps(payload, sort_keys=True).encode()).hexdigest()[:12]
+
+
+def build_hash(s: Settings) -> str:
+    """What the stored graph and documents depend on: extraction model and prompt, chunking.
+
+    Never credentials, DSNs, pricing or guards, so it is stable across machines and secrets.
+    """
+    from kgrag.extract.prompts import PROMPT_VERSION
+
+    return _digest({
+        "extract_model": s.models.extract,
+        "extract_prompt": s.prompt_versions.get("extract", PROMPT_VERSION),
+        "chunk_tokens": s.chunk_tokens,
+    })
+
+
+def run_hash(s: Settings, graph_config=None) -> str:
+    """What an eval run's numbers depend on beyond the data: answer/judge/embedding models,
+    token budget, answer/judge prompts and (graph runs) the retriever config's fingerprint.
+
+    `graph_config` is a GraphRetrieverConfig or None (vector runs, or the system-independent
+    part shared by all runs).
+    """
+    from kgrag.answer.prompt import ANSWER_PROMPT_VERSION
+    from kgrag.eval.judge import JUDGE_PROMPT_VERSION
+
+    return _digest({
+        "answer_model": s.models.answer, "judge_model": s.models.judge,
+        "embed_model": s.models.embed, "budget_tokens": s.budget_tokens,
+        "answer_prompt": s.prompt_versions.get("answer", ANSWER_PROMPT_VERSION),
+        "judge_prompt": s.prompt_versions.get("judge", JUDGE_PROMPT_VERSION),
+        "graph_config": None if graph_config is None else graph_config.fingerprint(),
+    })
 
 
 def load_env(path: Path | None = None) -> None:

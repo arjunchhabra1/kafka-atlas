@@ -9,12 +9,12 @@ from itertools import islice
 import psycopg
 from neo4j import Driver
 
-from kgrag.config import config_hash, get_settings
+from kgrag.config import build_hash, get_settings
 from kgrag.extract.schema import Mention
 from kgrag.graph.types import EDGE_RULES, NODE_LABELS, BuildStats, GraphMeta
 from kgrag.observability import traced
 from kgrag.resolve.interface import ID_TYPES, Resolution, normalize_id
-from kgrag.store.repo import load_mentions, load_resolution
+from kgrag.store.repo import load_mentions, load_resolution, resolution_hash
 
 BATCH = 1000
 _EXTRACTOR_RANK = {"header": 0, "regex": 1, "jira": 2, "llm": 3}
@@ -243,6 +243,7 @@ def _load(driver: Driver, g: _Graph) -> None:
 def build_graph(conn: psycopg.Connection, driver: Driver, resolver_name: str) -> BuildStats:
     """Clear the database and rebuild the graph for one stored resolution."""
     resolution = load_resolution(conn, resolver_name)
+    res_hash = resolution_hash(conn, resolver_name)  # same snapshot as the rows just loaded
     if not resolution.assignments:
         raise ValueError(f"no stored resolution for resolver {resolver_name!r}; run `kgrag resolve`")
     g = _assemble(conn, resolution)
@@ -263,14 +264,16 @@ def build_graph(conn: psycopg.Connection, driver: Driver, resolver_name: str) ->
     if humans and not with_parent:
         warnings.append("no emails have parent_message_id: REPLIED_TO is empty; "
                         "run scripts/backfill_parents.py")
-    meta = GraphMeta(resolver_name, datetime.now(UTC), config_hash(get_settings()),
-                     sum(nodes.values()), sum(rels.values()))
+    meta = GraphMeta(resolver_name, datetime.now(UTC), build_hash(get_settings()),
+                     sum(nodes.values()), sum(rels.values()), res_hash)
     with driver.session() as s:
         s.run(
             "CREATE (m:GraphMeta {id: 'meta', resolver: $resolver, built_at: $built_at, "
-            "config_hash: $config_hash, node_count: $node_count, rel_count: $rel_count})",
-            resolver=meta.resolver, built_at=meta.built_at, config_hash=meta.config_hash,
-            node_count=meta.node_count, rel_count=meta.rel_count,
+            "build_hash: $build_hash, resolution_hash: $resolution_hash, "
+            "node_count: $node_count, rel_count: $rel_count})",
+            resolver=meta.resolver, built_at=meta.built_at, build_hash=meta.build_hash,
+            resolution_hash=meta.resolution_hash, node_count=meta.node_count,
+            rel_count=meta.rel_count,
         ).consume()
     return BuildStats(nodes=nodes, rels=rels, skipped=dict(sorted(g.skipped.items())),
                       warnings=warnings)
@@ -282,5 +285,5 @@ def read_graph_meta(driver: Driver) -> GraphMeta | None:
     if rec is None:
         return None
     m = rec["m"]
-    return GraphMeta(m["resolver"], m["built_at"].to_native(), m["config_hash"],
-                     m["node_count"], m["rel_count"])
+    return GraphMeta(m["resolver"], m["built_at"].to_native(), m.get("build_hash"),
+                     m["node_count"], m["rel_count"], m.get("resolution_hash"))

@@ -12,7 +12,7 @@ def _run(tmp_path, system, resolver):
          "latency_ms": 1.0, "tokens_in": 10, "tokens_out": 5, "error": None}
     h = {"run_id": f"{system}-{resolver}", "system": system, "resolver": resolver, "split": "dev",
          "models": {"answer": "claude-sonnet-5-5", "judge": "claude-opus-5-5"},
-         "prompt_versions": {}, "config_hash": "h", "n_questions": 1, "n_errors": 0,
+         "prompt_versions": {}, "run_hash": "h", "base_run_hash": "h", "build_hash": "b", "n_questions": 1, "n_errors": 0,
          "degraded": False}
     p = tmp_path / f"{h['run_id']}.json"
     p.write_text(json.dumps({"header": h, "questions": [q]}))

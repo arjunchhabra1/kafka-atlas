@@ -28,9 +28,10 @@ EDGE_RULES: dict[str, tuple[frozenset[str], frozenset[str]]] = {
 class GraphMeta:
     resolver: str
     built_at: datetime
-    config_hash: str
+    build_hash: str | None       # config.build_hash at build time (None: built before it existed)
     node_count: int
     rel_count: int
+    resolution_hash: str | None = None  # repo.resolution_hash of the stored resolution used
 
 
 @dataclass

@@ -1,6 +1,8 @@
 import pytest
 
+from kgrag.config import build_hash, get_settings
 from kgrag.graph.build import build_graph, read_graph_meta
+from kgrag.store.repo import resolution_hash
 
 pytestmark = pytest.mark.integration
 
@@ -129,7 +131,9 @@ def test_graph_meta_written(slice_conn, neo4j_driver):
     assert meta.resolver == "exact"
     assert meta.node_count == sum(stats.nodes.values())
     assert meta.rel_count == sum(stats.rels.values())
-    assert len(meta.config_hash) == 12 and meta.built_at.tzinfo is not None
+    assert len(meta.build_hash) == 12 and meta.built_at.tzinfo is not None
+    assert meta.build_hash == build_hash(get_settings())
+    assert meta.resolution_hash and meta.resolution_hash == resolution_hash(slice_conn, "exact")
     assert _scalar(neo4j_driver, "MATCH (m:GraphMeta) RETURN count(m)") == 1
 
 

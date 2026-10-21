@@ -17,7 +17,7 @@ def _q(qid, qtype, recall, full, verdict, gold=("d1",)):
 def _write(tmp_path, system, resolver, questions, split="test", stamp="x", **header):
     h = {"run_id": f"{system}-{resolver or 'na'}-{split}-{stamp}", "started_at": stamp, "system": system, "resolver": resolver,
          "split": split, "models": {"answer": "claude-sonnet-5-5", "judge": "claude-opus-5-5"},
-         "prompt_versions": {"answer": "answer-v1", "judge": "judge-v1"}, "config_hash": "h",
+         "prompt_versions": {"answer": "answer-v1", "judge": "judge-v1"}, "run_hash": "h", "base_run_hash": "h", "build_hash": "b",
          "n_questions": len(questions),
          "n_errors": sum(q["verdict"] == "error" for q in questions), "degraded": False, **header}
     path = tmp_path / f"{h['run_id']}.json"
@@ -130,14 +130,22 @@ def test_latest_nondegraded_run_per_system_and_split_filter(tmp_path):
 
 def test_mismatch_banner(tmp_path):
     a = _write(tmp_path, "vector", None, _questions(False))
-    b = _write(tmp_path, "graph", "exact", _questions(True), config_hash="other",
+    b = _write(tmp_path, "graph", "exact", _questions(True), base_run_hash="other",
                models={"answer": "m2", "judge": "claude-opus-5-5"},
-               graph_meta={"resolver": "exact", "built_at": "t", "config_hash": "older"})
+               graph_meta={"resolver": "exact", "built_at": "t", "build_hash": "older"})
     md = render_report([a, b])
     assert "MISMATCH: graph-exact vs vector: models differ" in md
-    assert "MISMATCH: graph-exact vs vector: config_hash differ" in md
-    assert "graph built with config older" in md
+    assert "MISMATCH: graph-exact vs vector: base_run_hash differ" in md
+    assert "graph built with build settings older" in md
     assert "MISMATCH" not in render_report([a])
+
+
+def test_no_mismatch_for_like_runs_with_different_graph_configs(tmp_path):
+    # the run hash differs by graph config; only the system-independent part is compared
+    a = _write(tmp_path, "vector", None, _questions(False), run_hash="v")
+    b = _write(tmp_path, "graph", "user", _questions(True), run_hash="g", graph_config="graph-only",
+               graph_meta={"resolver": "user", "built_at": "t", "build_hash": "b"})
+    assert "MISMATCH" not in render_report([a, b])
 
 
 def test_judge_section_notes_unreported_run(tmp_path):

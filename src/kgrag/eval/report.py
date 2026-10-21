@@ -89,12 +89,12 @@ def _mismatches(runs: dict[str, dict]) -> list[str]:
     for label, r in runs.items():
         h = r["header"]
         meta = h.get("graph_meta")
-        if meta and meta.get("config_hash") != h["config_hash"]:
-            out.append(f"{label}: graph built with config {meta.get('config_hash')} but run "
-                       f"with config {h['config_hash']}")
+        if meta and meta.get("build_hash") != h.get("build_hash"):
+            out.append(f"{label}: graph built with build settings {meta.get('build_hash')} "
+                       f"(extraction model/prompt, chunking) but run with {h.get('build_hash')}")
         if base is None or label == "vector":
             continue
-        for field in ("models", "prompt_versions", "config_hash"):
+        for field in ("models", "prompt_versions", "base_run_hash"):
             if base["header"].get(field) != h.get(field):
                 out.append(f"{label} vs vector: {field} differ "
                            f"({base['header'].get(field)} vs {h.get(field)})")
@@ -249,14 +249,14 @@ def render_report(
         out += [f"> **DEGRADED RUN: {label}** - {h['n_errors']} of {h['n_questions']} questions "
                 "errored (more than 10%). Its numbers are not trustworthy.", ""]
     out += ["## Runs", "", "| System | Run | Questions | Errors | Models (answer / judge) | "
-            "Prompts | Config hash |", "|---|---|---|---|---|---|---|"]
+            "Prompts | Run hash |", "|---|---|---|---|---|---|---|"]
     for label, r in runs.items():
         h = r["header"]
         n_err = h.get("n_errors", sum(q["verdict"] == "error" for q in r["questions"]))
         out.append(f"| {label} | {h['run_id']} | {len(r['questions'])} | {n_err} | "
                    f"{h['models']['answer']} / {h['models']['judge']} | "
                    f"{', '.join(f'{k}={v}' for k, v in h['prompt_versions'].items())} | "
-                   f"{h['config_hash']} |")
+                   f"{h.get('run_hash', 'n/a')} |")
     out += ["", "Errored questions are excluded from answer accuracy (the n in each cell). "
             "Cells are `mean [95% bootstrap CI] (n)`. *Indicative*: the per-type groups have few "
             "questions each, so their intervals are wide.", "", "## Results", ""]

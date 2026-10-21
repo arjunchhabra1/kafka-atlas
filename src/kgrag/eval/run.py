@@ -13,7 +13,7 @@ import psycopg
 
 from kgrag.answer.chain import Answer, answer
 from kgrag.answer.prompt import ANSWER_PROMPT_VERSION, SYSTEM_PROMPT
-from kgrag.config import CONFIG_PATH, config_hash, get_settings
+from kgrag.config import CONFIG_PATH, build_hash, get_settings, run_hash
 from kgrag.eval.judge import JUDGE_PROMPT_VERSION, grade
 from kgrag.eval.metrics import full_evidence, source_recall
 from kgrag.graph.build import read_graph_meta
@@ -274,14 +274,19 @@ def run_eval(
         "models": settings.models.model_dump(),
         "prompt_versions": {"answer": ANSWER_PROMPT_VERSION, "judge": JUDGE_PROMPT_VERSION,
                             **settings.prompt_versions},
-        "config_hash": config_hash(settings),
+        # run_hash: everything the numbers depend on besides the data (incl. the graph config);
+        # base_run_hash: the system-independent part, compared across systems by the report;
+        # build_hash: the extraction/chunking settings, compared with the graph's GraphMeta.
+        "run_hash": run_hash(settings, config),
+        "base_run_hash": run_hash(settings, None),
+        "build_hash": build_hash(settings),
         "started_at": started.isoformat(),
         "finished_at": datetime.now(UTC).isoformat(),
         "n_questions": len(records), "n_errors": n_errors,
         "degraded": n_errors / len(records) > DEGRADED_ERROR_RATE,
         "graph_meta": None if meta is None else {
             "resolver": meta.resolver, "built_at": meta.built_at.isoformat(),
-            "config_hash": meta.config_hash},
+            "build_hash": meta.build_hash, "resolution_hash": meta.resolution_hash},
     }
     path = results_dir / f"{run_id}.json"
     path.write_text(json.dumps({"header": header, "questions": records}, indent=2))

@@ -305,3 +305,17 @@ def load_resolution(conn: psycopg.Connection, resolver_name: str) -> Resolution:
         out.canonical_names[eid] = name
         out.entity_types[eid] = etype
     return out
+
+
+def resolution_hash(conn: psycopg.Connection, resolver_name: str) -> str | None:
+    """Content hash of the stored resolution rows for `resolver_name` (None if there are none).
+
+    Recorded in GraphMeta at build time; eval compares it to detect a re-resolve without rebuild.
+    """
+    row = conn.execute(
+        "select encode(sha256(convert_to(string_agg("
+        "concat_ws(E'\\t', mention_id, entity_id, canonical_name, entity_type), E'\\n' "
+        "order by mention_id), 'UTF8')), 'hex') from resolutions where resolver = %s",
+        (resolver_name,),
+    ).fetchone()
+    return row[0][:16] if row and row[0] else None

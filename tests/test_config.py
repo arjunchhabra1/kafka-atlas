@@ -2,7 +2,7 @@ import os
 
 import pytest
 
-from kgrag.config import config_hash, get_settings
+from kgrag.config import build_hash, get_settings, run_hash
 
 
 @pytest.fixture(autouse=True)
@@ -22,13 +22,39 @@ def test_settings_load_defaults():
     assert s.models.judge == "claude-opus-5-5"
 
 
-def test_config_hash_stable():
+def test_build_and_run_hashes_stable_and_scoped():
+    from kgrag.retrieve.graph_config import DEFAULT_CONFIG, GRAPH_ONLY_CONFIG
+
     s = get_settings()
-    h = config_hash(s)
-    assert len(h) == 12
-    assert config_hash(s) == h
-    changed = s.model_copy(update={"budget_tokens": 1234})
-    assert config_hash(changed) != h
+    b, r = build_hash(s), run_hash(s)
+    assert len(b) == len(r) == 12 and build_hash(s) == b and run_hash(s) == r
+    # budget and answer/judge/embed models are run settings, not build settings
+    for update in ({"budget_tokens": 1234},
+                   {"models": s.models.model_copy(update={"answer": "other"})},
+                   {"models": s.models.model_copy(update={"embed": "voyage-other"})}):
+        c = s.model_copy(update=update)
+        assert run_hash(c) != r and build_hash(c) == b, update
+    # extraction model and chunking are build settings
+    for update in ({"chunk_tokens": 400},
+                   {"models": s.models.model_copy(update={"extract": "other"})},
+                   {"prompt_versions": {"extract": "extract-v2"}}):
+        c = s.model_copy(update=update)
+        assert build_hash(c) != b and run_hash(c) == r, update
+    assert run_hash(s.model_copy(update={"prompt_versions": {"judge": "judge-v9"}})) != r
+    assert run_hash(s, DEFAULT_CONFIG) not in (r, run_hash(s, GRAPH_ONLY_CONFIG))
+
+
+def test_hashes_ignore_secrets_dsns_pricing_and_guards():
+    from kgrag.config import ModelPrice
+
+    s = get_settings()
+    b, r = build_hash(s), run_hash(s)
+    for update in ({"neo4j_password": "s3cret"}, {"pg_dsn": "postgresql://u:pw@db:5432/x"},
+                   {"neo4j_uri": "neo4j+s://x.databases.neo4j.io"}, {"cost_guard_usd": 99.0},
+                   {"pricing": {"m": ModelPrice(input=1, output=2)}}, {"batch_discount": 1.0},
+                   {"db_mode": "cloudsql"}):
+        c = s.model_copy(update=update)
+        assert build_hash(c) == b and run_hash(c) == r, update
 
 
 def test_env_overrides_yaml(monkeypatch):

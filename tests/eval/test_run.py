@@ -127,7 +127,8 @@ def test_results_file_header_fields(eval_conn, tmp_path):
                     judge_llm=FakeLLM(verdict="partial"))
     data = json.loads(path.read_text())
     h = data["header"]
-    assert {"run_id", "system", "resolver", "split", "models", "prompt_versions", "config_hash",
+    assert {"run_id", "system", "resolver", "split", "models", "prompt_versions", "run_hash",
+            "base_run_hash", "build_hash",
             "started_at", "finished_at", "degraded"} <= set(h)
     assert h["resolver"] is None and h["degraded"] is False
     assert h["run_id"].startswith("vector-na-dev-") and path.name == f"{h['run_id']}.json"
