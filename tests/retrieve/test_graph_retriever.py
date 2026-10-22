@@ -86,8 +86,19 @@ def test_graph_only_unlinkable_question_is_empty_and_never_embeds(fixture_kg, mo
     assert res.trace["strategy"] == "empty" and res.trace["embeddings"] == 0
 
 
-def test_no_entity_question_falls_back_to_vector(graph_retrieve, fixture_kg):
-    res = graph_retrieve("What's a good pizza recipe?", 4000)
+def test_no_entity_question_still_uses_vector_hits_and_doc_bridge(graph_retrieve, fixture_kg):
+    q = "What's a good pizza recipe?"
+    res = graph_retrieve(q, 4000)
+    assert res.trace["unlinked"] is True and res.trace["strategy"] == "graph"
+    hits = [e.doc_id for e in fixture_kg.search_chunks(q, k=DEFAULT_CONFIG.vector_seeds)]
+    got = {e.doc_id for e in res.evidence}
+    assert hits and set(hits) <= got  # the vector pseudo seed keeps the best hits in the pool
+    assert "doc_bridge" in res.trace
+
+
+def test_no_entity_question_falls_back_to_vector(fixture_kg):
+    config = DEFAULT_CONFIG.with_(doc_bridge=False, vector_seeds=0)
+    res = graph_retriever.retrieve("What's a good pizza recipe?", fixture_kg, 4000, config)
     assert res.trace["strategy"] == "vector_fallback"
     assert res.trace["unlinked"] is True and res.trace["fallback"] is True
     assert res.trace["fallback_reason"] == "no entity linked"
@@ -131,3 +142,27 @@ def test_neighbors_many_caps_each_node_to_its_strongest_edges_in_cypher(fixture_
         return sum(e.type == "AFFECTS" for e, _ in pairs[node])
 
     assert any(affects(k, frozenset({"AFFECTS"})) > affects(k, frozenset()) for k in range(1, len(full)))
+
+
+class _CypherKG:
+    def __init__(self, rows):
+        self.rows, self.calls = rows, []
+
+    def cypher(self, query, params=None, timeout=None):
+        self.calls.append(params)
+        return [r for r in self.rows if set(r["via"]) & set(params["docs"])]
+
+
+def test_doc_bridge_seeds_best_pivot_first_and_skip_known_and_placeholders():
+    kg = _CypherKG([
+        {"id": "KIP:KIP-9", "label": "KIP", "name": "KIP-9", "via": ["d2"]},
+        {"id": "JiraTicket:KAFKA-1", "label": "JiraTicket", "name": "KAFKA-1", "via": ["d1", "d2"]},
+        {"id": "KIP:KIP-5", "label": "KIP", "name": "KIP-5", "via": ["d1"]},
+        {"id": "KIP:?x:m1", "label": "KIP", "name": "?", "via": ["d1"]},
+    ])
+    seeds = graph_retriever.doc_bridge_seeds(kg, ["d1", "d2"], {"KIP:KIP-5"},
+                                             DEFAULT_CONFIG.with_(doc_bridge_max_seeds=5))
+    assert [(s.id, s.surface) for s in seeds] == [("JiraTicket:KAFKA-1", "d1"), ("KIP:KIP-9", "d2")]
+    assert all(s.how == "doc_bridge" and s.weight == DEFAULT_CONFIG.doc_bridge_weight
+               and not s.strong for s in seeds)
+    assert graph_retriever.doc_bridge_seeds(kg, [], set()) == [] and len(kg.calls) == 1

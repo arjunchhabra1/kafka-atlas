@@ -78,6 +78,14 @@ How it works
    evidence for both. Budget left after the graph candidates is backfilled with plain
    vector hits. Then `pack_to_budget` cuts the list to the budget.
 
+4b. Doc bridge and vector fusion (added after the first dev-split ablation, 2026-10-22).
+   Inference questions name a KIP / ticket only through another discussion ("the KIP Jane
+   said ..."), so linking finds just the person and the KIP is three hops away. The best
+   first-pass docs and the question's best vector hits are pivots; the KIPs and tickets they
+   mention become weak hop-1 seeds (`doc_bridge_*`). The best vector hits also join the pool
+   as one pseudo seed (`vector_seeds`), so a doc no linked entity reaches still competes.
+   Graph-only turns the vector parts off. Dev recall (44 multi-hop questions): 0.43 -> 0.65.
+
 5. Trace. The trace records:
    * the linked seeds (and how each was linked), dropped mentions, cues and bridge entities
    * walk stats: rows per hop, capped nodes, skipped siblings
@@ -98,7 +106,7 @@ from kgrag.retrieve.graph_config import (
     STRUCTURAL_TYPES,
     GraphRetrieverConfig,
 )
-from kgrag.retrieve.graph_linking import Seed, link_entities
+from kgrag.retrieve.graph_linking import Seed, _valid, link_entities
 from kgrag.retrieve.packing import pack_to_budget
 from kgrag.retrieve.types import Evidence, RetrievalResult
 from kgrag.retrieve.vector import K as VECTOR_K
@@ -418,6 +426,44 @@ def walk(kg: KnowledgeGraph, seeds: list[Seed], cues: frozenset[str],
     return Walk(supports, sorted(_label(b, names) for b in bridges), stats)
 
 
+VECTOR_SEED = "vector:question"  # pseudo seed of the question's best vector hits
+
+# --- doc bridge -----------------------------------------------------------------------------
+
+# KIPs and tickets an edge justified by one of the given docs points at (an email's
+# MENTIONS, a Jira event's FILED / RESOLVED ...).
+_DOC_ENTITIES = (
+    "MATCH ()-[r]->(t) WHERE (t:KIP OR t:JiraTicket) "
+    "AND any(d IN r.source_doc_ids WHERE d IN $docs) "
+    "RETURN DISTINCT t.id AS id, labels(t)[0] AS label, coalesce(t.name, t.id) AS name, "
+    "[d IN r.source_doc_ids WHERE d IN $docs] AS via ORDER BY id"
+)
+
+
+def doc_bridge_seeds(kg: KnowledgeGraph, pivots: list[str], known: set[str],
+                     config: GraphRetrieverConfig = DEFAULT_CONFIG) -> list[Seed]:
+    """The KIPs / tickets the pivot docs are about or mention, as weak hop-1 seeds, best pivot
+    first (at most doc_bridge_max_seeds; seeds already linked from the question are skipped)."""
+    if not pivots:
+        return []
+    rank = {d: i for i, d in enumerate(pivots)}
+    best: dict[str, tuple[int, dict]] = {}
+    for r in kg.cypher(_DOC_ENTITIES, {"docs": pivots}, timeout=config.query_timeout_s):
+        if r["id"] in known or not _valid(r["id"]):
+            continue
+        i = min(rank[d] for d in r["via"])
+        if r["id"] not in best or i < best[r["id"]][0]:
+            best[r["id"]] = (i, r)
+    order = sorted(best.values(), key=lambda x: (x[0], x[1]["id"]))[:config.doc_bridge_max_seeds]
+    return [Seed(r["id"], r["label"], r["name"], "doc_bridge", pivots[i], config.doc_bridge_weight)
+            for i, r in order]
+
+
+def _merge(into: dict[str, dict[str, Support]], more: dict[str, dict[str, Support]]) -> None:
+    for doc_id, by_seed in more.items():
+        into.setdefault(doc_id, {}).update(by_seed)
+
+
 # --- entry point --------------------------------------------------------------------------
 
 class _QuestionVector:
@@ -492,6 +538,30 @@ def _selected_trace(evidence: list[Evidence], ranked: list[Ranked]) -> list[dict
             for e in evidence]
 
 
+def _rank(kg: KnowledgeGraph, question: str, supports: dict[str, dict[str, Support]],
+          seeds: list[Seed], qvec: _QuestionVector, config: GraphRetrieverConfig,
+          ) -> tuple[list[Ranked], dict[str, str], dict[str, dict[str, Support]], int]:
+    """Graph score -> top semantic_pool get a similarity (and their text comes back with it)
+    -> top max_candidates are anchored, diversified and ranked. Returns (ranked, texts,
+    anchored candidates, number anchored)."""
+    pool = [r.doc_id for r in rank_docs(supports, {}, config)[:config.semantic_pool]]
+    texts: dict[str, str] = {}
+    sem: dict[str, float] = {}
+    if config.semantic_rerank:
+        hits = kg.search_chunks(question, k=len(pool), restrict_to=pool, embedding=qvec.get())
+        texts = {e.doc_id: e.text for e in hits}
+        sem = minmax({e.doc_id: e.score for e in hits})
+    top = [r.doc_id for r in rank_docs({d: supports[d] for d in pool}, sem, config)
+           [:config.max_candidates]]
+    missing = [d for d in top if d not in texts]
+    texts.update((d.doc_id, d.text) for d in (kg.documents(missing) if missing else []))
+    cand, anchored = anchor({d: supports[d] for d in top if d in texts}, texts, seeds, config)
+    rounds = config.diversify_rounds if config.diversify else 0
+    strong = [s.id for s in seeds
+              if s.strong or (config.doc_bridge_diversify and s.how == "doc_bridge")]
+    return diversify(rank_docs(cand, sem, config), strong, rounds), texts, cand, anchored
+
+
 @traced("retrieve.graph")
 def retrieve(question: str, kg: KnowledgeGraph, budget_tokens: int,
              config: GraphRetrieverConfig | None = None) -> RetrievalResult:
@@ -503,36 +573,51 @@ def retrieve(question: str, kg: KnowledgeGraph, budget_tokens: int,
     trace: dict = {"budget_tokens": budget_tokens, "config": _switches(config),
                    "unlinked": not linking.seeds, "fallback": False,
                    "linked": [_seed_trace(s) for s in linking.seeds], "dropped": linking.dropped}
-    if not linking.seeds:
+    if not linking.seeds and not (config.semantic_rerank and (config.doc_bridge
+                                                             or config.vector_seeds)):
         return _no_graph_evidence(kg, budget_tokens, trace, "no entity linked", qvec, clock,
                                   config)
 
     cues = relation_cues(question)
-    w = walk(kg, linking.seeds, cues, config)
+    supports: dict[str, dict[str, Support]] = {}
+    seeds = list(linking.seeds)
+    if seeds:
+        w = walk(kg, seeds, cues, config)
+        supports = w.supports
+        trace.update(cues=sorted(cues), bridges=w.bridges, walk=w.stats)
     clock.lap("walk")
-    trace.update(cues=sorted(cues), bridges=w.bridges, walk=w.stats)
-    if not w.supports:
-        return _no_graph_evidence(kg, budget_tokens, trace, "linked entities have no evidence",
-                                  qvec, clock, config)
 
-    # Rerank: graph score -> top semantic_pool get a similarity (and their text comes back
-    # with it) -> top max_candidates are anchored, diversified and packed.
-    pool = [r.doc_id for r in rank_docs(w.supports, {}, config)[:config.semantic_pool]]
-    texts: dict[str, str] = {}
-    sem: dict[str, float] = {}
+    top_hits: list[str] = []
     if config.semantic_rerank:
-        hits = kg.search_chunks(question, k=len(pool), restrict_to=pool, embedding=qvec.get())
-        texts = {e.doc_id: e.text for e in hits}
-        sem = minmax({e.doc_id: e.score for e in hits})
-    clock.lap("semantic")
-    top = [r.doc_id for r in rank_docs({d: w.supports[d] for d in pool}, sem, config)
-           [:config.max_candidates]]
-    missing = [d for d in top if d not in texts]
-    texts.update((d.doc_id, d.text) for d in (kg.documents(missing) if missing else []))
-    cand, anchored = anchor({d: w.supports[d] for d in top if d in texts}, texts,
-                            linking.seeds, config)
-    rounds = config.diversify_rounds if config.diversify else 0
-    ranked = diversify(rank_docs(cand, sem, config), [s.id for s in linking.seeds if s.strong], rounds)
+        k = max(config.doc_bridge_pivots if config.doc_bridge else 0, config.vector_seeds)
+        if k:
+            top_hits = [e.doc_id for e in kg.search_chunks(question, k=k, embedding=qvec.get())]
+
+    if config.doc_bridge:
+        # Multi-hop through a doc: the question describes a KIP / ticket only through another
+        # discussion ("the KIP Jane said ..."). Pivot on the best first-pass docs (and, with
+        # embeddings, the best vector hits), then walk from what they mention.
+        pivots = [r.doc_id for r in _rank(kg, question, supports, seeds, qvec, config)[0]
+                  ][:config.doc_bridge_pivots] if supports else []
+        pivots += [d for d in top_hits[:config.doc_bridge_pivots] if d not in pivots]
+        bridged = doc_bridge_seeds(kg, pivots, {s.id for s in seeds}, config)
+        if bridged:
+            _merge(supports, walk(kg, bridged, cues, config).supports)
+            seeds += bridged
+        trace.update(doc_bridge=[_seed_trace(s) | {"pivot": s.surface} for s in bridged])
+        clock.lap("doc_bridge")
+
+    if config.vector_seeds and top_hits:
+        n = min(config.vector_seeds, len(top_hits))
+        for i, doc_id in enumerate(top_hits[:n]):
+            add_support(supports, doc_id, VECTOR_SEED,
+                        round(config.vector_seed_weight * (1 - i / n), 6), f"vector hit #{i + 1}")
+
+    if not supports:
+        reason = "linked entities have no evidence" if seeds else "no entity linked"
+        return _no_graph_evidence(kg, budget_tokens, trace, reason, qvec, clock, config)
+
+    ranked, texts, cand, anchored = _rank(kg, question, supports, seeds, qvec, config)
     clock.lap("rank")
 
     candidates = [Evidence(doc_id=r.doc_id, text=texts[r.doc_id], score=r.score) for r in ranked]
@@ -542,7 +627,7 @@ def retrieve(question: str, kg: KnowledgeGraph, budget_tokens: int,
                     if e.doc_id not in cand]
     evidence = pack_to_budget(candidates + backfill, budget_tokens)
     clock.lap("pack")
-    trace.update(strategy="graph", candidates=len(w.supports), reranked=len(cand),
+    trace.update(strategy="graph", candidates=len(supports), reranked=len(cand),
                  anchored=anchored, backfilled=sum(e.doc_id not in cand for e in evidence),
                  embeddings=qvec.calls, selected=_selected_trace(evidence, ranked),
                  ms=clock.done())
