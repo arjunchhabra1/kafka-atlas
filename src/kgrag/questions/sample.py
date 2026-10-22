@@ -31,6 +31,15 @@ NOISY_LINE = re.compile(
 )
 NOISY_SHARE = 0.3
 BRIDGE_THREE_DOCS = 0.25  # inference: share of bridge sets with a second "about" doc
+# inference: at most this share of bridge sets may end on a (one-line) Jira event; email about
+# docs (a later vote, release or design thread on the same id) are always tried first.
+MAX_JIRA_BRIDGE_SHARE = 0.25
+LATER_ABOUT_SHARE = 0.8  # inference: chance that later email threads are tried first
+# temporal: the later email restates the earlier one when it contains this share of the
+# earlier email's content words (a summary needs no earlier doc to say what changed).
+RESTATE_OVERLAP = 0.5
+_REPLY_OR_VOTE = re.compile(r"^\s*(re|aw)\s*:|\[vote\]", re.IGNORECASE)
+_SUMMARY = re.compile(r"\[(result|results|announce|summary)\]", re.IGNORECASE)
 KIP_SHARE = 0.75  # comparison / temporal: share of sets built around KIPs rather than tickets
 MAX_WORD_BUCKET = 40  # title words shared by more items than this are too generic to relate them
 MAX_COMENTION = 4  # a doc naming more ids of one kind than this does not relate them
@@ -66,6 +75,7 @@ class _Doc:
     ids: frozenset[str]  # canonical KIP / ticket ids
     subject_ids: frozenset[str] = frozenset()  # ids in the subject: the doc is ABOUT them
     title: str = ""  # subject, used to relate items by topic
+    words: frozenset[str] = frozenset()  # content words of the text (restatement heuristic)
 
 
 def is_noisy(text: str) -> bool:
@@ -74,6 +84,10 @@ def is_noisy(text: str) -> bool:
     if not lines:
         return True
     return sum(1 for ln in lines if NOISY_LINE.search(ln)) / len(lines) >= NOISY_SHARE
+
+
+def content_words(text: str) -> frozenset[str]:
+    return frozenset(w for w in re.findall(r"[a-z][a-z0-9]{3,}", text.lower()) if w not in _STOP)
 
 
 def _ids_in(text: str) -> frozenset[str]:
@@ -140,7 +154,8 @@ def _load_docs(conn: psycopg.Connection) -> list[_Doc]:
         else:
             ids = frozenset(chunk_ids.get(doc_id, ()))
             about = _ids_in(subject)
-        docs.append(_Doc(doc_id, kind, source_id, thread, date, ids | about, about, subject))
+        docs.append(_Doc(doc_id, kind, source_id, thread, date, ids | about, about, subject,
+                         content_words(text)))
     return docs
 
 
@@ -236,6 +251,9 @@ def _inference(docs: list[_Doc], rng: random.Random) -> Iterator[EvidenceSet]:
 
     The first doc identifies the bridge entity through its context; the other(s) state facts
     about it. Sets where every doc is about the same id (same content restated) never occur.
+    Email about-docs come first (later threads, such as a vote or release thread, usually
+    first); at most MAX_JIRA_BRIDGE_SHARE of the sets end on a Jira event, whose one-line
+    title tends to answer the question alone.
     """
     about = _about(docs)
     citing: dict[str, list[_Doc]] = {}
@@ -243,12 +261,23 @@ def _inference(docs: list[_Doc], rng: random.Random) -> Iterator[EvidenceSet]:
         for ident in sorted(d.ids - d.subject_ids):
             if ident in about:
                 citing.setdefault(ident, []).append(d)
+    made = {"sets": 0, "jira": 0}
+
+    def about_pool(a: _Doc, ident: str, allow_jira: bool) -> list[_Doc]:
+        emails = [b for b in about[ident] if b.kind == "email"]
+        rng.shuffle(emails)
+        if rng.random() < LATER_ABOUT_SHARE:
+            emails.sort(key=lambda b: b.date <= a.date)
+        jira = [b for b in about[ident] if b.kind == "jira"] if allow_jira else []
+        rng.shuffle(jira)
+        return emails + jira
 
     def build(ident: str) -> EvidenceSet | None:
+        allow_jira = made["jira"] + 1 <= MAX_JIRA_BRIDGE_SHARE * (made["sets"] + 1)
         for a in _prefer_email(citing[ident], rng):
             want = 2 if rng.random() >= BRIDGE_THREE_DOCS else 3
             picked = [a]
-            for b in _prefer_email(about[ident], rng, 0.7):
+            for b in about_pool(a, ident, allow_jira):
                 if len(picked) < want and b.thread not in {p.thread for p in picked}:
                     picked.append(b)
             if len(picked) >= 2:
@@ -260,7 +289,13 @@ def _inference(docs: list[_Doc], rng: random.Random) -> Iterator[EvidenceSet]:
                 )
         return None
 
-    return _collect(sorted(citing), build, rng)
+    def counted() -> Iterator[EvidenceSet]:
+        for es in _collect(sorted(citing), build, rng):
+            made["sets"] += 1
+            made["jira"] += any(d.startswith("jira:") for d in es.doc_ids[1:])
+            yield es
+
+    return counted()
 
 
 def _split_kinds(keys) -> tuple[list[str], list[str]]:
@@ -268,29 +303,38 @@ def _split_kinds(keys) -> tuple[list[str], list[str]]:
     return [k for k in keys if _id_kind(k) == "KIP"], [k for k in keys if _id_kind(k) != "KIP"]
 
 
+def restates(later: _Doc, earlier: _Doc) -> bool:
+    """True when the later doc repeats most of the earlier doc's content words."""
+    if not earlier.words:
+        return False
+    return len(earlier.words & later.words) / len(earlier.words) >= RESTATE_OVERLAP
+
+
+def temporal_pair_ok(a: _Doc, b: _Doc) -> bool:
+    """Two emails a week or more apart where the later one is not a summary and either is a
+    reply or vote (a step in the lifecycle) or does not restate the earlier one."""
+    return (
+        a.kind == b.kind == "email" and a.source_id != b.source_id
+        and b.date - a.date >= MIN_TEMPORAL_GAP and not _SUMMARY.search(b.title)
+        and (_REPLY_OR_VOTE.search(b.title) is not None or not restates(b, a))
+    )
+
+
 def _temporal(docs: list[_Doc], rng: random.Random) -> Iterator[EvidenceSet]:
-    """Docs about one KIP / ticket / discussion, at least a week apart (KIPs preferred)."""
+    """Pairs of emails about one KIP / ticket, at least a week apart (KIPs preferred), where
+    the later email does not restate the change: what changed needs both."""
     groups = _about(docs)
 
     def build(ident: str) -> EvidenceSet | None:
-        pool = _prefer_email(groups[ident], rng)
+        pool = _prefer_root([d for d in groups[ident] if d.kind == "email"], rng)
         for a in pool:
             for b in pool:
-                if (a.kind, a.source_id) != (b.kind, b.source_id) and (
-                    b.date - a.date >= MIN_TEMPORAL_GAP
-                ):
-                    picked = [a, b]
-                    if rng.random() < 0.4:
-                        mid = [
-                            m for m in pool
-                            if a.date <= m.date <= b.date
-                            and (m.kind, m.source_id) not in {(p.kind, p.source_id) for p in picked}
-                        ]
-                        if mid:
-                            picked.append(rng.choice(mid))
+                if temporal_pair_ok(a, b):
                     return EvidenceSet(
-                        type="temporal", doc_ids=_ordered(picked), link=f"temporal:{ident}",
-                        hint=f"Every document is about {ident}; they are from different dates.",
+                        type="temporal", doc_ids=[a.doc_id, b.doc_id], link=f"temporal:{ident}",
+                        hint=f"Both documents are about {ident}: the earlier one "
+                             f"({a.date:%Y-%m-%d}, subject {a.title!r}) and the later one "
+                             f"({b.date:%Y-%m-%d}, subject {b.title!r}).",
                     )
         return None
 

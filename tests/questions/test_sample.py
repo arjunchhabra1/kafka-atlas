@@ -9,8 +9,11 @@ from kgrag.extract.regex_ids import extract_ids
 from kgrag.extract.pipeline import persist_extractions
 from kgrag.questions.sample import (
     HUMAN_SHARE,
+    MAX_JIRA_BRIDGE_SHARE,
     _Doc,
+    _inference,
     _load_docs,
+    _temporal,
     _rng,
     _single_hop,
     is_noisy,
@@ -261,3 +264,71 @@ def test_single_hop_jira_share_is_small():
     picked = [es.doc_ids[0] for es, _ in zip(_single_hop(docs, _rng(1, "single_hop")), range(200))]
     share = sum(p.startswith("jira:") for p in picked) / len(picked)
     assert 0.08 <= share <= 0.22
+
+
+def _d(name, kind, thread, when, about=(), cites=(), title="", words=""):
+    return _Doc(f"{kind}:{name}", kind, name, thread, datetime(2026, 1, when, tzinfo=UTC),
+                frozenset(about) | frozenset(cites), frozenset(about), title,
+                frozenset(words.split()))
+
+
+def test_inference_prefers_email_bridges_and_caps_jira_endings():
+    docs = []
+    for i in range(12):
+        ident = f"KIP-{i}"
+        docs.append(_d(f"c{i}", "email", f"tc{i}", 1, cites=[ident], title="[DISCUSS] other"))
+        docs.append(_d(f"j{i}", "jira", f"jira:{ident}", 5, about=[ident]))
+        if i < 6:  # half the ids also have a later email thread about them
+            docs.append(_d(f"a{i}", "email", f"ta{i}", 9, about=[ident],
+                           title=f"[VOTE] {ident}"))
+    sets = [es for seed in range(5) for es in _inference(docs, _rng(seed, "inference"))]
+    assert sets
+    for seed in range(5):
+        run = list(_inference(docs, _rng(seed, "inference")))
+        jira_end = [es for es in run if any(d.startswith("jira:") for d in es.doc_ids[1:])]
+        assert len(jira_end) <= MAX_JIRA_BRIDGE_SHARE * len(run)
+        assert jira_end  # still allowed, as a minority
+        for es in run:
+            n = int(es.link.removeprefix("bridge:KIP-"))
+            if n < 6:  # an email about-doc exists: it is always used
+                assert f"email:a{n}" in es.doc_ids
+
+
+def test_inference_prefers_later_email_threads():
+    docs = [_d("c", "email", "tc", 10, cites=["KIP-1"], title="[DISCUSS] other")]
+    docs += [_d(f"early{i}", "email", f"te{i}", 2, about=["KIP-1"]) for i in range(3)]
+    docs += [_d("late", "email", "tl", 20, about=["KIP-1"], title="[VOTE] KIP-1")]
+    firsts = []
+    for seed in range(20):
+        es = next(_inference(docs, _rng(seed, "inference")))
+        firsts.append("email:late" in es.doc_ids)
+    assert sum(firsts) >= 16
+
+
+def test_temporal_pairs_are_emails_without_restatement():
+    words = "broker fencing epoch controller quorum snapshot"
+    docs = [
+        _d("root", "email", "t1", 1, about=["KIP-9"], title="[DISCUSS] KIP-9: fencing",
+           words=words),
+        # later, restates the proposal: excluded
+        _d("restate", "email", "t2", 10, about=["KIP-9"], title="[DISCUSS] KIP-9 v2",
+           words=words),
+        # later reply: included even though it overlaps
+        _d("reply", "email", "t1", 12, about=["KIP-9"], title="Re: [DISCUSS] KIP-9: fencing",
+           words=words),
+        # later vote thread with little overlap: included
+        _d("vote", "email", "t3", 20, about=["KIP-9"], title="[VOTE] KIP-9", words="plus one"),
+        # summaries and Jira events never end a temporal pair
+        _d("result", "email", "t4", 25, about=["KIP-9"], title="[RESULT][VOTE] KIP-9",
+           words="accepted"),
+        _d("j", "jira", "jira:KIP-9", 26, about=["KIP-9"]),
+    ]
+    pairs = {tuple(es.doc_ids) for seed in range(30)
+             for es in _temporal(docs, _rng(seed, "temporal"))}
+    assert pairs
+    allowed = {("email:root", "email:reply"), ("email:root", "email:vote"),
+               ("email:restate", "email:vote"), ("email:reply", "email:vote"),
+               ("email:restate", "email:reply")}
+    assert pairs <= allowed and len(pairs) >= 3
+    for es in _temporal(docs, _rng(1, "temporal")):
+        assert len(es.doc_ids) == 2 and "earlier" in es.hint and "later" in es.hint

@@ -27,7 +27,7 @@ from kgrag.questions.sample import (
 from kgrag.store.repo import Document, QuestionRow, get_documents, insert_question, log_failure
 from kgrag.tokens import count_tokens
 
-DRAFT_PROMPT_VERSION = "draft-v2"
+DRAFT_PROMPT_VERSION = "draft-v3"
 MULTI_HOP: tuple[QuestionType, ...] = ("inference", "comparison", "temporal")
 # Randomly sampled single-hop goes first so ID-linked relabels never displace it.
 DRAFT_ORDER: tuple[QuestionType, ...] = ("single_hop", *MULTI_HOP, "null")
@@ -36,13 +36,24 @@ MAX_CONSECUTIVE_FAILURES = 5  # a systemic error (bad key, outage) must not burn
 MAX_KEY_TERMS = 4
 MIN_KEY_TERMS = 2
 MAX_QUESTION_WORDS = 30
-DATE_SHARE_CAP = 0.15  # at most this share of a run's kept drafts may have a date-centric answer
+# At most this share of all non-dropped questions (stored plus this run's target) may be
+# date-centric: stored answer_kind 'date', or matched by `is_date_centric`.
+DATE_SHARE_CAP = 0.15
+GIVEAWAY_NGRAM = 8  # a question sharing this many consecutive tokens with a gold doc copies it
 ATTEMPT_CAP_FACTOR = 3  # per type, at most this many drafting attempts per kept-draft target
 NULL_CHECK_MAX_DOCS = 20  # candidate docs an LLM reads to confirm a null question is unanswered
 NULL_CHECK_BATCH_TOKENS = 6000
-AVG_GOLD_DOCS = {"single_hop": 1, "inference": 2.25, "comparison": 2, "temporal": 2.4, "null": 0}
-# Leave-one-out calls: only 3-doc sets (a minority of inference/temporal) get one call per doc.
-AVG_LOO_CALLS = {"inference": 0.75, "temporal": 1.2}
+AVG_GOLD_DOCS = {"single_hop": 1, "inference": 2.25, "comparison": 2, "temporal": 2, "null": 0}
+# Leave-one-out calls: only 3-doc sets (a minority of inference) get one call per doc.
+AVG_LOO_CALLS = {"inference": 0.75}
+# Drafting attempts per kept draft, by type, when the current prompt version has too little
+# history in evidence_attempts to measure it (pilot-2 rates, rounded up).
+DEFAULT_ATTEMPTS_PER_KEPT = {
+    "single_hop": 1.3, "null": 1.8, "comparison": 2.0, "inference": 3.5, "temporal": 3.5,
+}
+MIN_HISTORY_ATTEMPTS = 10  # attempts of one type before its measured rate replaces the default
+COUNTED_OUTCOMES = ("kept", "shrunk")  # outcomes that count toward a type's target
+TYPICAL_RANGE = (0.75, 1.5)  # attempts-per-kept multipliers for the typical cost range
 # Assumptions for the cost estimate: a draft is a short JSON object, a filter verdict is tiny.
 EST_DRAFT_OUTPUT_TOKENS = 200
 EST_FILTER_OUTPUT_TOKENS = 30
@@ -101,16 +112,20 @@ TYPE_INSTRUCTIONS: dict[str, str] = {
         "The two documents are about two RELATED items. Write ONE question that compares them "
         "on substance (scope, approach, outcome, who supported or objected, which release "
         "shipped each, whether they overlap or conflict) and needs BOTH documents to answer. "
-        "Name both items. Do NOT ask which came first and do not compare dates. Set "
+        "Name both items, but do not ask WHICH of the two does something (the answer would "
+        "then be named in the question). Do NOT ask which came first and do not compare "
+        "dates. Set "
         "viable=false if dates are the only dimension the documents share."
     ),
     "temporal": (
-        "The documents are about one KIP, ticket or discussion at different dates. Write ONE "
-        "question about what changed between the earlier and the later document: how the "
-        "design evolved, a decision or position that was reversed, or a status change and its "
-        "reason; it must need EVERY document to answer. Never ask which came first. Only if "
-        "nothing changed in substance may you ask how long something took (answer_kind "
-        "'date'). Set viable=false if neither works."
+        "The two documents are about one KIP or ticket at two points of its lifecycle (for "
+        "example the design discussion and a later reply or vote). Write ONE question asking "
+        "what changed, or why it changed, between the earlier point and the later one: how the "
+        "design evolved, a position or decision that was reversed, a concern raised and how it "
+        "was resolved. Name both points (for example 'between the KIP-1079 design discussion "
+        "and its vote'). The answer must need BOTH documents: the earlier one for the starting "
+        "point, the later one for the change. Never ask which came first, when something "
+        "happened or how long it took. Set viable=false if nothing changed in substance."
     ),
     "null": (
         "You are given only the topic of a discussion. Write a question that is plausible "
@@ -145,6 +160,15 @@ FILTER_PROMPT = (
     "essentially the reference answer, even if a minor detail, a qualifier or the exact "
     "wording is missing; false only if another source is genuinely needed."
 )
+BRIDGE_FILTER_PROMPT = (
+    "The question below is a BRIDGE question: it identifies a KIP or ticket only through a "
+    "clue (what another discussion said about it) and asks for one fact about that KIP or "
+    "ticket. How the evidence relates is described below. Judge the single document below "
+    "on its own. has_clue: does this document itself contain the identifying clue, so a "
+    "reader with only this document could tell which KIP or ticket the question means? "
+    "has_fact: does this document state the asked fact (essentially the reference answer, "
+    "even if a minor detail or the exact wording is missing)?"
+)
 NULL_CHECK_PROMPT = (
     "The question below is meant to be unanswerable from the Apache Kafka dev mailing list. "
     "Decide whether ANY of the documents below answers it, even partially or approximately "
@@ -165,6 +189,11 @@ class DraftSchema(BaseModel):
 
 class SingleSourceSchema(BaseModel):
     answerable: bool
+
+
+class BridgeSourceSchema(BaseModel):
+    has_clue: bool
+    has_fact: bool
 
 
 class OtherDocsSchema(BaseModel):
@@ -201,10 +230,13 @@ class DraftStats:
     dropped_compound: int = 0
     dropped_too_long: int = 0
     dropped_date_cap: int = 0
+    dropped_giveaway: int = 0
+    dropped_jira_date: int = 0
     dropped_unviable: int = 0
     skipped_existing: int = 0
     failed: int = 0
-    date_cap: int = 0
+    date_cap: int = 0  # most date-centric questions the whole non-dropped set may hold
+    dates_existing: int = 0  # date-centric non-dropped questions stored before this run
     kept_by_type: dict[str, int] = field(default_factory=dict)
     kept_by_origin: dict[str, int] = field(default_factory=dict)
     kept_by_answer_kind: dict[str, int] = field(default_factory=dict)
@@ -279,6 +311,25 @@ def single_source_doc(draft: DraftQuestion, docs: list[Document], llm: BaseChatM
     return None
 
 
+def bridge_single_source_doc(
+    draft: DraftQuestion, docs: list[Document], hint: str, llm: BaseChatModel
+) -> str | None:
+    """The first gold doc holding BOTH the bridge clue and the asked fact, or None.
+
+    The core check over-fires on bridges: an about-doc states the fact, but a reader cannot
+    tell which entity is meant without the citing doc's clue.
+    """
+    for doc in docs:
+        user = (
+            f"How the evidence relates: {hint}\n\nDocument:\n\n{_format_doc(doc)}\n\n"
+            f"Question: {draft.question}\nReference answer: {draft.answer}"
+        )
+        out = _invoke(llm, BridgeSourceSchema, BRIDGE_FILTER_PROMPT, user)
+        if out.has_clue and out.has_fact:
+            return doc.doc_id
+    return None
+
+
 def leave_one_out(draft: DraftQuestion, docs: list[Document], llm: BaseChatModel) -> list[Document]:
     """For a 3-doc set, drop the first doc the other two can answer without; else keep all.
 
@@ -301,6 +352,133 @@ def answerable_from_single_source(
     draft: DraftQuestion, docs: list[Document], llm: BaseChatModel
 ) -> bool:
     return single_source_doc(draft, docs, llm) is not None
+
+
+# --- deterministic checks ----------------------------------------------------------------
+
+_DATE_QUESTION = re.compile(
+    r"^\W*when\s+(did|was|were|is|are|will|does|do|has|had|have|would|could|should|can)\b"
+    r"|\bhow\s+long\b|\bhow\s+(soon|quickly)\b"
+    r"|\bhow\s+many\s+(minutes|hours|days|weeks|months|years)\b"
+    r"|\b(what|which)\s+(date|day|month|year)\b"
+    r"|\bwhich\b[^?]*\b(came|happened|occurred|was\s+\w+|were\s+\w+)\s+"
+    r"(first|earlier|later|sooner|last)\b"
+    r"|\bbefore\s+or\s+after\b|\bafter\s+or\s+before\b",
+    re.IGNORECASE,
+)
+_MONTH = (r"(?:jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|june?|july?|aug(?:ust)?"
+          r"|sep(?:t(?:ember)?)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)")
+_NUMBER = (r"(?:\d+(?:\.\d+)?|an?|one|two|three|four|five|six|seven|eight|nine|ten|eleven"
+           r"|twelve|few|several)")
+_DATE_SPAN = re.compile(
+    rf"\b\d{{4}}-\d{{1,2}}-\d{{1,2}}\b|\b\d{{1,2}}/\d{{1,2}}/\d{{2,4}}\b"
+    rf"|\b{_MONTH}\.?\s+\d{{1,2}}(?:st|nd|rd|th)?\b(?:,?\s+\d{{4}}\b)?"
+    rf"|\b\d{{1,2}}(?:st|nd|rd|th)?\s+{_MONTH}\b(?:,?\s+\d{{4}}\b)?"
+    rf"|\b{_MONTH}\s+\d{{4}}\b|\b(?:19|20)\d{{2}}\b"
+    rf"|\b{_NUMBER}\s+(?:minute|hour|day|week|month|year)s?\b"
+    rf"|\b(?:same|next|following|previous)\s+(?:day|week|month|year)\b",
+    re.IGNORECASE,
+)
+# Words that may surround a date or duration in an answer that is still "just a date".
+_DATE_FILLER = frozenset(
+    "on in at by the a an and or of from to between after before about around roughly "
+    "approximately later earlier than until since within just over under nearly almost first "
+    "then it its was were took take it's this that only some late early mid end start "
+    "beginning created resolved opened closed".split()
+)
+
+
+def is_date_centric(question: str, answer: str) -> bool:
+    """Deterministic date/duration/ordering detector on the question and answer text.
+
+    The question asks when / how long / how many days / what date / which came first or
+    before-or-after; or the answer is mainly a date or duration (no KIP, ticket or release in
+    it, and at most two other content words).
+    """
+    if _DATE_QUESTION.search(question):
+        return True
+    if not _DATE_SPAN.search(answer) or extract_ids(answer):
+        return False
+    rest = _DATE_SPAN.sub(" ", answer)
+    words = [w for w in re.findall(r"[a-z']+", rest.lower()) if w not in _DATE_FILLER]
+    return len(words) <= 2
+
+
+def _norm_tokens(text: str) -> list[str]:
+    """Lowercased word tokens; punctuation dropped except dots inside versions / configs."""
+    return re.findall(r"[a-z0-9]+(?:\.[a-z0-9]+)*", text.lower())
+
+
+def _contains(tokens: list[str], part: list[str]) -> bool:
+    return bool(part) and f" {' '.join(part)} " in f" {' '.join(tokens)} "
+
+
+_TRIVIAL_ANSWERS = frozenset({"yes", "no", "both", "neither", "none"})
+_GENERIC = frozenset({"the", "a", "an", "apache", "kafka"})
+_VERSION = re.compile(r"(?<![\w.])\d+\.\d+(?:\.\d+)?(?![\w.])")
+# Words that may surround identifiers in an answer that is still "just an identifier".
+_ID_FILLER = frozenset(
+    "the a an in of and or was were is fixed by via apache kafka release version ticket kip "
+    "jira config configuration option".split()
+)
+
+
+def _answer_ids(answer: str) -> list[str]:
+    """Identifiers in an answer that is essentially only identifiers (else [])."""
+    ids = [h.id for h in extract_ids(answer)]
+    ids += _VERSION.findall(answer) + _IDENT.findall(answer)
+    if not ids:
+        return []
+    rest = answer
+    for ident in sorted(set(ids), key=len, reverse=True):
+        rest = rest.replace(ident, " ")
+    rest = re.sub(r"\b(?:KIP|KAFKA)[- ]?\d+\b", " ", rest, flags=re.IGNORECASE)
+    words = [w for w in re.findall(r"[a-z]+", rest.lower()) if w not in _ID_FILLER]
+    return sorted(set(ids)) if len(words) <= 2 else []
+
+
+def _mentions(text: str, ident: str) -> bool:
+    body = term_pattern(ident)
+    return body is not None and _py(body).search(text) is not None
+
+
+def giveaway(draft: DraftQuestion, es: EvidenceSet, docs: list[Document]) -> str | None:
+    """Why the question gives itself away, or None.
+
+    'answer': the normalized answer appears in the question; 'answer_id': an answer that is
+    only identifiers has all of them in the question (any surface variant); 'bridge_id': a
+    bridge question names its bridge entity; 'ngram': the question copies GIVEAWAY_NGRAM
+    consecutive tokens from a gold doc.
+    """
+    q = _norm_tokens(draft.question)
+    if draft.type != "null" and draft.answer_kind != "yes_no":
+        answer = _norm_tokens(draft.answer)
+        while answer and answer[0] in _GENERIC:
+            answer = answer[1:]
+        if answer and " ".join(answer) not in _TRIVIAL_ANSWERS and _contains(q, answer):
+            return "answer"
+        ids = _answer_ids(draft.answer)
+        if ids and all(_mentions(draft.question, i) for i in ids):
+            return "answer_id"
+    if es.type == "inference" and es.link.startswith("bridge:"):
+        if _mentions(draft.question, es.link.removeprefix("bridge:")):
+            return "bridge_id"
+    n = GIVEAWAY_NGRAM
+    grams = {tuple(q[i:i + n]) for i in range(len(q) - n + 1)}
+    for doc in docs:
+        t = _norm_tokens(doc.text)
+        if grams & {tuple(t[i:i + n]) for i in range(len(t) - n + 1)}:
+            return "ngram"
+    return None
+
+
+def existing_date_counts(conn: psycopg.Connection) -> tuple[int, int]:
+    """(non-dropped questions, date-centric among them: stored kind 'date' or classifier)."""
+    rows = conn.execute(
+        "select question, answer, answer_kind from questions where status <> 'dropped'"
+    ).fetchall()
+    dates = sum(1 for q, a, kind in rows if kind == "date" or is_date_centric(q, a))
+    return len(rows), dates
 
 
 # --- null questions ----------------------------------------------------------------------
@@ -467,17 +645,18 @@ def _record_attempt(
     conn: psycopg.Connection, es: EvidenceSet, outcome: str, question_id: str | None
 ) -> None:
     conn.execute(
-        "insert into evidence_attempts (type, link, evidence_doc_ids, outcome, question_id) "
-        "values (%s, %s, %s, %s, %s) on conflict (type, evidence_doc_ids, link) do update "
-        "set outcome = excluded.outcome, question_id = excluded.question_id, "
-        "attempted_at = now()",
-        (es.type, es.link, sorted(es.doc_ids), outcome, question_id),
+        "insert into evidence_attempts (type, link, evidence_doc_ids, outcome, question_id, "
+        "prompt_version) values (%s, %s, %s, %s, %s, %s) on conflict (type, evidence_doc_ids, "
+        "link) do update set outcome = excluded.outcome, question_id = excluded.question_id, "
+        "prompt_version = excluded.prompt_version, attempted_at = now()",
+        (es.type, es.link, sorted(es.doc_ids), outcome, question_id, DRAFT_PROMPT_VERSION),
     )
 
 
-def date_cap(targets: dict[str, int]) -> int:
-    """Most date-centric drafts one run may keep: DATE_SHARE_CAP of its total target."""
-    return math.floor(DATE_SHARE_CAP * sum(targets.values()))
+def date_cap(targets: dict[str, int], existing: int = 0) -> int:
+    """Most date-centric questions the non-dropped set may hold after this run: DATE_SHARE_CAP
+    of the existing non-dropped questions plus the run's total target."""
+    return math.floor(DATE_SHARE_CAP * (existing + sum(targets.values())))
 
 
 def draft_questions(
@@ -491,12 +670,14 @@ def draft_questions(
     """Sample, draft, filter and store drafts (status 'draft').
 
     Each type keeps sampling until ceil(count * oversample) drafts are kept or the corpus runs
-    out of evidence sets. Randomly sampled single-hop goes first; a multi-hop draft that one
-    doc answers alone is relabeled single_hop only into remaining single-hop headroom.
+    out of evidence sets. Randomly sampled single-hop goes first; a comparison or temporal
+    draft that one doc answers alone is relabeled single_hop only into remaining single-hop
+    headroom. A bridge (inference) draft is never relabeled: it is dropped.
 
-    Every draft must be viable, at most MAX_QUESTION_WORDS words and a single ask; once the
-    run has kept its date cap of date-centric drafts, further date answers are dropped and the
-    type tops up from other sets.
+    Every draft must be viable, at most MAX_QUESTION_WORDS words, free of giveaways and a
+    single ask. Date-centric drafts (model label or `is_date_centric`) are capped across the
+    whole non-dropped set (DATE_SHARE_CAP); past the cap they are dropped and the type tops up
+    from other sets. Single-hop date questions about a Jira event are always dropped.
     """
     stats = DraftStats()
     model = get_settings().models.draft
@@ -507,7 +688,8 @@ def draft_questions(
         llm = _default_llm()
     single_target = targets.get("single_hop", 0)
     single_kept = 0
-    stats.date_cap = date_cap(targets)
+    existing, stats.dates_existing = existing_date_counts(conn)
+    stats.date_cap = date_cap(targets, existing)
 
     def store(d: DraftQuestion, es: EvidenceSet, origin: str) -> str:
         row = QuestionRow(
@@ -545,7 +727,14 @@ def draft_questions(
             return drop("dropped_unviable")
         if too_long(d):
             return drop("dropped_too_long")
-        if d.answer_kind == "date" and stats.kept_by_answer_kind.get("date", 0) >= stats.date_cap:
+        if giveaway(d, es, docs):
+            return drop("dropped_giveaway")
+        if is_date_centric(d.question, d.answer):
+            if es.type == "single_hop" and docs[0].source_kind == "jira":
+                return drop("dropped_jira_date")
+            d = d.model_copy(update={"answer_kind": "date"})
+        dates = stats.dates_existing + stats.kept_by_answer_kind.get("date", 0)
+        if d.answer_kind == "date" and dates >= stats.date_cap:
             return drop("dropped_date_cap")
         if not is_single_question(d, llm):
             return drop("dropped_compound")
@@ -560,7 +749,12 @@ def draft_questions(
             ):
                 return drop("dropped_null_present")
             return True, "kept", store(d, es, "sampled")
-        alone = single_source_doc(d, docs, llm)
+        if es.type == "inference":
+            if bridge_single_source_doc(d, docs, es.hint, llm) is not None:
+                return drop("dropped_single_source")  # never relabeled: no clue, no question
+            alone = None
+        else:
+            alone = single_source_doc(d, docs, llm)
         if alone is not None:
             if single_kept >= single_target:
                 return drop("dropped_single_source")
@@ -575,6 +769,8 @@ def draft_questions(
             dates = [x.date for x in kept_docs]
             if es.type == "temporal" and max(dates) - min(dates) < MIN_TEMPORAL_GAP:
                 return drop("dropped_shrunk")
+            if es.type == "inference" and kept_docs[0].doc_id != docs[0].doc_id:
+                return drop("dropped_shrunk")  # the citing doc is redundant: not a bridge
             d = d.model_copy(update={"gold_doc_ids": [x.doc_id for x in kept_docs]})
             outcome = "shrunk"
         return True, outcome, store(d, es, "sampled")
@@ -618,44 +814,99 @@ def avg_doc_tokens(conn: psycopg.Connection) -> int:
     return round(row[0] or 0)
 
 
-def estimate_draft_cost_usd(
-    counts: dict[QuestionType, int], avg_tokens: int, model: str, *, oversample: float = 1.3,
-    worst_case: bool = False,
-) -> float:
-    """Draft call and single-ask check per set, filter calls per multi-hop set, candidate
-    checks per null set.
+def attempts_per_kept(conn: psycopg.Connection) -> dict[str, float]:
+    """Drafting attempts per kept draft by type, measured from evidence_attempts under the
+    current prompt version once a type has MIN_HISTORY_ATTEMPTS attempts, else the default.
+    Clamped to [1, ATTEMPT_CAP_FACTOR]: a type that keeps nothing uses its whole cap."""
+    factors = dict(DEFAULT_ATTEMPTS_PER_KEPT)
+    rows = conn.execute(
+        "select type, count(*), count(*) filter (where outcome = any(%s)) from "
+        "evidence_attempts where prompt_version = %s group by type order by type",
+        (list(COUNTED_OUTCOMES), DRAFT_PROMPT_VERSION),
+    ).fetchall()
+    for qtype, attempts, kept in rows:
+        if qtype in factors and attempts >= MIN_HISTORY_ATTEMPTS:
+            rate = attempts / kept if kept else ATTEMPT_CAP_FACTOR
+            factors[qtype] = min(max(rate, 1.0), ATTEMPT_CAP_FACTOR)
+    return factors
 
-    Expected = one attempt per target draft; worst case = every type uses its full attempt cap.
-    """
-    price = get_settings().pricing[model]
+
+def _attempt_tokens(qtype: str, avg_tokens: int) -> tuple[float, float]:
+    """Input and output tokens of one drafting attempt that runs every check."""
     longest = max(TYPE_INSTRUCTIONS.values(), key=len)
     draft_overhead = count_tokens(
         SYSTEM_PROMPT + longest + json.dumps(DraftSchema.model_json_schema())
     )
     filter_overhead = count_tokens(
-        FILTER_PROMPT + json.dumps(SingleSourceSchema.model_json_schema())
+        max(FILTER_PROMPT, BRIDGE_FILTER_PROMPT, key=len)
+        + json.dumps(BridgeSourceSchema.model_json_schema())
     )
     ask_tokens = count_tokens(SINGLE_ASK_PROMPT + json.dumps(SingleAskSchema.model_json_schema()))
     ask_tokens += 2 * MAX_QUESTION_WORDS
     null_overhead = count_tokens(NULL_CHECK_PROMPT + json.dumps(NullCheckSchema.model_json_schema()))
     null_docs = min(NULL_CHECK_MAX_DOCS * avg_tokens, NULL_CHECK_BATCH_TOKENS)
+    docs = AVG_GOLD_DOCS[qtype]
+    in_tok = draft_overhead + max(docs, 1) * avg_tokens + ask_tokens
+    out_tok = EST_DRAFT_OUTPUT_TOKENS + EST_FILTER_OUTPUT_TOKENS
+    if qtype in MULTI_HOP:
+        # one single-doc call per gold doc (+ the hint), leave-one-out calls on 3-doc sets
+        in_tok += docs * (filter_overhead + avg_tokens + 150)
+        loo = AVG_LOO_CALLS.get(qtype, 0)
+        in_tok += loo * (filter_overhead + 2 * avg_tokens + 100)
+        out_tok += (docs + loo) * EST_FILTER_OUTPUT_TOKENS
+    if qtype == "null":
+        in_tok += EST_NULL_CHECK_CALLS * (null_overhead + null_docs + 100)
+        out_tok += EST_NULL_CHECK_CALLS * EST_FILTER_OUTPUT_TOKENS
+    return in_tok, out_tok
+
+
+def estimate_draft_cost_usd(
+    counts: dict[QuestionType, int], avg_tokens: int, model: str, *, oversample: float = 1.3,
+    worst_case: bool = False, factors: dict[str, float] | None = None, scale: float = 1.0,
+) -> float:
+    """Estimated cost of drafting `counts` (with the safety margin).
+
+    Expected: each type makes target x attempts-per-kept attempts (`factors`, default
+    DEFAULT_ATTEMPTS_PER_KEPT, times `scale`), at least one per target and at most its attempt
+    cap. Worst case: every type uses its full attempt cap. Every attempt is costed as if it
+    ran every check (cheap rejections make the real cost lower).
+    """
+    price = get_settings().pricing[model]
+    factors = factors or DEFAULT_ATTEMPTS_PER_KEPT
     in_tok = out_tok = 0.0
     for qtype, count in counts.items():
-        n = math.ceil(count * oversample)
-        if worst_case:
-            n = attempt_cap(n)
-        docs = AVG_GOLD_DOCS[qtype]
-        in_tok += n * (draft_overhead + max(docs, 1) * avg_tokens + ask_tokens)
-        out_tok += n * (EST_DRAFT_OUTPUT_TOKENS + EST_FILTER_OUTPUT_TOKENS)
-        if qtype in MULTI_HOP:
-            # one single-doc call per gold doc, plus leave-one-out calls on 3-doc sets
-            filters = n * docs
-            in_tok += filters * (filter_overhead + avg_tokens + 100)
-            loo = n * AVG_LOO_CALLS.get(qtype, 0)
-            in_tok += loo * (filter_overhead + 2 * avg_tokens + 100)
-            out_tok += (filters + loo) * EST_FILTER_OUTPUT_TOKENS
-        if qtype == "null":
-            calls = n * EST_NULL_CHECK_CALLS
-            in_tok += calls * (null_overhead + null_docs + 100)
-            out_tok += calls * EST_FILTER_OUTPUT_TOKENS
+        target = math.ceil(count * oversample)
+        if target <= 0:
+            continue
+        cap = attempt_cap(target)
+        n = cap if worst_case else min(max(target * factors[qtype] * scale, target), cap)
+        i, o = _attempt_tokens(qtype, avg_tokens)
+        in_tok += n * i
+        out_tok += n * o
     return (in_tok * price.input + out_tok * price.output) / 1_000_000 * COST_SAFETY_MARGIN
+
+
+@dataclass(frozen=True)
+class CostEstimate:
+    expected: float
+    low: float
+    high: float
+    worst: float
+
+
+def estimate_draft_costs(
+    counts: dict[QuestionType, int], avg_tokens: int, model: str, *, oversample: float = 1.3,
+    factors: dict[str, float] | None = None,
+) -> CostEstimate:
+    """Expected cost, a typical range (attempts-per-kept x TYPICAL_RANGE) and the worst case."""
+    def est(**kw) -> float:
+        return estimate_draft_cost_usd(counts, avg_tokens, model, oversample=oversample,
+                                       factors=factors, **kw)
+
+    return CostEstimate(expected=est(), low=est(scale=TYPICAL_RANGE[0]),
+                        high=est(scale=TYPICAL_RANGE[1]), worst=est(worst_case=True))
+
+
+def format_cost_line(est: CostEstimate) -> str:
+    return (f"expected ${est.expected:.2f} (typical range ${est.low:.2f}–${est.high:.2f}), "
+            f"worst case ${est.worst:.2f}")

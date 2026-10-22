@@ -11,6 +11,7 @@ from kgrag.questions.draft import (
     DRAFT_PROMPT_VERSION,
     DraftQuestion,
     NULL_ANSWER,
+    BridgeSourceSchema,
     DraftSchema,
     NullCheckSchema,
     OtherDocsSchema,
@@ -38,7 +39,8 @@ class FakeLLM:
 
     def __init__(self, *, key_terms=("protocol", "broker"), answers_alone=(),
                  others_answerable=None, fail=False, answer_kind="entity", single_ask=True,
-                 viable=True, question=None, null_answered=False):
+                 viable=True, question=None, null_answered=False, answer="An answer.",
+                 bridge_clue=None):
         self.key_terms = key_terms  # list, or callable(draft call number) -> list
         self.answers_alone = set(answers_alone)  # doc ids that answer on their own
         self.others_answerable = others_answerable or (lambda ids: False)
@@ -48,6 +50,9 @@ class FakeLLM:
         self.viable = viable
         self.question = question  # None -> a unique short question per call
         self.null_answered = null_answered  # callable(prompt text) -> bool, or bool
+        self.answer = answer
+        # bridge filter: docs holding the identifying clue (default: those that answer alone)
+        self.bridge_clue = self.answers_alone if bridge_clue is None else set(bridge_clue)
         self.calls: list[tuple[str, str]] = []
         self.kwargs: list[dict] = []
 
@@ -66,7 +71,7 @@ class FakeLLM:
                 return DraftSchema(
                     question=f"Question #{len(self.calls)}?" if self.question is None
                     else self.question,
-                    answer="An answer." if self.viable else "", key_terms=list(terms), answer_kind=kind,
+                    answer=self.answer if self.viable else "", key_terms=list(terms), answer_kind=kind,
                     viable=self.viable,
                 )
             if schema is SingleAskSchema:
@@ -77,6 +82,10 @@ class FakeLLM:
             if schema is OtherDocsSchema:
                 ids = frozenset(re.findall(r"^\[([^\]]+)\]", text, re.M))
                 return OtherDocsSchema(answerable=self.others_answerable(ids))
+            if schema is BridgeSourceSchema:
+                doc = re.search(r"^\[([^\]]+)\]", text, re.M).group(1)
+                return BridgeSourceSchema(has_clue=doc in self.bridge_clue,
+                                          has_fact=doc in self.answers_alone)
             assert schema is SingleSourceSchema
             return SingleSourceSchema(
                 answerable=any(f"[{d}]" in text for d in self.answers_alone)
@@ -96,7 +105,7 @@ def _rows(conn):
 
 
 def test_prompt_version():
-    assert DRAFT_PROMPT_VERSION == "draft-v2"
+    assert DRAFT_PROMPT_VERSION == "draft-v3"
 
 
 def test_draft_question_builds_from_set_and_docs(corpus):
@@ -142,14 +151,14 @@ def test_relabel_fills_only_remaining_single_hop_headroom(corpus):
     llm = FakeLLM(answers_alone=every_doc)
     # 12 eligible docs; a target of 14 leaves headroom of 2 after sampling exhausts them.
     stats = draft_questions(
-        corpus, {"inference": 1, "single_hop": 14}, seed=3, llm=llm, oversample=1.0
+        corpus, {"comparison": 1, "single_hop": 14}, seed=3, llm=llm, oversample=1.0
     )
     assert stats.kept_by_origin == {"sampled": 12, "relabeled": 2}
-    assert stats.shortfall == {"single_hop": 2, "inference": 1}
+    assert stats.shortfall == {"single_hop": 2, "comparison": 1}
     row = corpus.execute(
         "select type, link, origin from questions where origin = 'relabeled' limit 1"
     ).fetchone()
-    assert row[0] == "single_hop" and row[1].startswith("bridge:")
+    assert row[0] == "single_hop" and row[1].startswith("related:")
 
 
 def test_multi_hop_kept_when_no_single_doc_answers(corpus):
@@ -158,7 +167,7 @@ def test_multi_hop_kept_when_no_single_doc_answers(corpus):
     rows = _rows(corpus)
     assert stats.kept == len(rows) >= 1
     assert all(r[0] == "inference" and len(r[1]) >= 2 for r in rows)
-    assert llm.count("SingleSourceSchema") >= 2  # one per gold doc
+    assert llm.count("BridgeSourceSchema") >= 2  # one per gold doc
 
 
 def test_answerable_from_single_source_asks_per_doc(corpus):
@@ -198,8 +207,15 @@ def test_leave_one_out_drops_redundant_doc(corpus):
     assert none.count("OtherDocsSchema") == 3
 
 
+CITING = {"email:e5:0", "email:e6:0", "email:e7:0"}  # fixture docs that cite a bridge id
+
+
+def _without_one_about_doc(ids):
+    return len(ids) == 2 and bool(ids & CITING)
+
+
 def test_leave_one_out_shrinks_stored_gold(corpus):
-    llm = FakeLLM(others_answerable=lambda ids: len(ids) == 2)
+    llm = FakeLLM(others_answerable=_without_one_about_doc)
     draft_questions(corpus, {"inference": 6}, seed=3, llm=llm, oversample=1.0)
     golds = [r[1] for r in _rows(corpus)]
     assert golds and all(len(g) == 2 for g in golds)
@@ -306,18 +322,18 @@ def _every_doc(conn):
 
 def test_rerun_after_relabel_does_not_redraft(corpus):
     llm = FakeLLM(answers_alone=_every_doc(corpus))
-    counts = {"inference": 1, "single_hop": 13}  # headroom of 1 -> one relabel
+    counts = {"comparison": 1, "single_hop": 13}  # headroom of 1 -> one relabel
     first = draft_questions(corpus, counts, seed=3, llm=llm, oversample=1.0)
     assert first.relabeled == 1
     draft_questions(corpus, counts, seed=3, llm=llm, oversample=1.0)
-    sets = _drafted_sets(llm, "BRIDGE question")
+    sets = _drafted_sets(llm, "two RELATED items")
     assert sets and len(sets) == len(set(sets))
     outcomes = {r[0] for r in corpus.execute("select outcome from evidence_attempts")}
     assert {"relabeled", "dropped_single_source", "kept"} <= outcomes
 
 
 def test_rerun_after_leave_one_out_shrink_does_not_redraft(corpus):
-    llm = FakeLLM(others_answerable=lambda ids: len(ids) == 2)
+    llm = FakeLLM(others_answerable=_without_one_about_doc)
     draft_questions(corpus, {"inference": 4}, seed=3, llm=llm, oversample=1.0)
     assert corpus.execute(
         "select count(*) from evidence_attempts where outcome = 'shrunk'"
@@ -372,7 +388,7 @@ def test_guard_compares_worst_case(corpus, cli_env, monkeypatch):
     get_settings.cache_clear()
     res = CliRunner().invoke(cli.app, ["questions", "draft", "--counts", "inference=5,null=5"])
     assert res.exit_code == 2, res.output
-    assert "worst-case" in res.output and "expected" in res.output
+    assert "worst case" in res.output and "expected" in res.output
 
 
 # --- CLI -------------------------------------------------------------------------------
@@ -580,3 +596,264 @@ def test_null_dropped_when_a_candidate_doc_answers(corpus):
     corpus.execute("truncate evidence_attempts")
     corpus.commit()
     assert draft_questions(corpus, {"null": 1}, seed=1, llm=keep, oversample=1.0).kept == 1
+
+
+# --- draft-v3 rules ------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize("question,answer", [
+    ("When did the vote on KIP-1079 pass?", "It passed with three binding votes."),
+    ("when was KAFKA-19229 resolved?", "Fixed."),
+    ("How long did KAFKA-18773 stay open after creation?", "Two weeks."),
+    ("How many days after creation was KAFKA-19229 resolved?", "Seven."),
+    ("How many weeks did the KIP-1166 discussion run?", "Three."),
+    ("On what date did Jun Rao start the KIP-1166 discussion?", "He started it in a reply."),
+    ("Which came first, the KIP-848 vote or the 3.7.0 release?", "The vote."),
+    ("Which Jira ticket was resolved earlier: KAFKA-16935 or KAFKA-17681?", "KAFKA-16935."),
+    ("Was the KIP-405 vote held before or after the 3.6.0 code freeze?", "Before it."),
+    ("Which ticket did Luke Chen say blocked the release candidate?", "On 2024-05-03."),
+    ("What was decided about KIP-500 in the follow-up?", "7 days: created on 2025-05-02 "
+     "and resolved on 2025-05-09"),
+    ("What did the proposer say about the rollout timing?", "About three weeks later."),
+    ("What did the reply say about the timeline?", "March 14, 2024"),
+])
+def test_date_classifier_positive(question, answer):
+    assert draft_mod.is_date_centric(question, answer)
+
+
+@pytest.mark.parametrize("question,answer", [
+    ("When the vote failed, who proposed the alternative design?", "Colin McCabe."),
+    ("Which release fixed the ticket Luke Chen said blocked the release candidate?",
+     "Kafka 3.7.1"),
+    ("Who objected to the KIP-1166 high-watermark change?", "Jun Rao objected."),
+    ("Why was the KIP-405 design changed after the first vote?",
+     "Because the RLMM API leaked implementation details."),
+    ("Which release shipped the fix?", "Kafka 3.7.0, released in March 2024."),
+    ("How many brokers does the KIP-1150 benchmark use?", "Six."),
+    ("Which approach did the later reply prefer?", "The first one, a pull-based design."),
+])
+def test_date_classifier_negative(question, answer):
+    assert not draft_mod.is_date_centric(question, answer)
+
+
+def _question(conn, qid, question, answer, kind, status="draft"):
+    conn.execute(
+        "insert into questions (id, type, question, answer, gold_doc_ids, status, answer_kind) "
+        "values (%s, 'single_hop', %s, %s, '{}', %s, %s)", (qid, question, answer, status, kind),
+    )
+
+
+def test_date_cap_seeded_from_existing_questions(corpus):
+    _question(corpus, "q1", "Which release fixed it?", "3.7.0", "date")  # stored label
+    _question(corpus, "q2", "How many days after creation was KAFKA-1 resolved?", "7", None)
+    _question(corpus, "q3", "When was KAFKA-2 created?", "In May", "entity")  # classifier wins
+    _question(corpus, "q4", "Who proposed KIP-1?", "Jun Rao", None)
+    _question(corpus, "q5", "When was KIP-2 accepted?", "Late", None, status="dropped")
+    _question(corpus, "q6", "Who wrote KIP-3?", "Ann", "entity", status="kept")
+    corpus.commit()
+    assert draft_mod.existing_date_counts(corpus) == (5, 3)
+    # 5 existing + 8 targeted -> cap floor(0.15 * 13) = 1, already exceeded by the 3 stored.
+    stats = draft_questions(corpus, {"single_hop": 8}, seed=1,
+                            llm=FakeLLM(answer_kind="date"), oversample=1.0)
+    assert stats.date_cap == 1 and stats.dates_existing == 3
+    assert stats.kept == 0 and stats.dropped_date_cap >= 8
+
+
+def test_date_cap_counts_classifier_matches_regardless_of_label(corpus):
+    llm = FakeLLM(answer_kind="entity", question="How long did the change take to land?")
+    stats = draft_questions(corpus, {"single_hop": 10}, seed=1, llm=llm, oversample=1.0)
+    assert stats.date_cap == 1 and stats.kept_by_answer_kind == {"date": 1}
+    assert corpus.execute("select answer_kind from questions").fetchall() == [("date",)]
+    assert stats.dropped_date_cap >= 1
+
+
+def test_jira_single_hop_when_questions_rejected(corpus):
+    llm = FakeLLM(question="When was the ticket resolved?")
+    draft_questions(corpus, {"single_hop": 12}, seed=1, llm=llm, oversample=1.0)
+    rows = dict(corpus.execute(
+        "select evidence_doc_ids[1], outcome from evidence_attempts"
+    ).fetchall())
+    assert rows["jira:1"] == rows["jira:2"] == "dropped_jira_date"
+    assert all(o != "dropped_jira_date" for d, o in rows.items() if d.startswith("email:"))
+
+
+def _dq(question, answer, qtype="single_hop", kind="entity", gold=("email:e1:0",)):
+    return DraftQuestion(question=question, answer=answer, type=qtype, gold_doc_ids=list(gold),
+                         key_terms=["a", "b"], answer_kind=kind)
+
+
+def test_giveaway_answer_in_question(corpus):
+    docs = get_documents(corpus, ["email:e1:0"])
+    es = EvidenceSet(type="single_hop", doc_ids=["email:e1:0"], link="doc:email:e1:0")
+    g = draft_mod.giveaway
+    assert g(_dq("Did Jun Rao, not Colin, object to KIP-1?", "Jun Rao"), es, docs) == "answer"
+    assert g(_dq("Which release, Kafka 4.3.0 or 4.2.0, fixed it?", "Kafka 4.3.0"), es, docs)
+    # id-like answer, matched by surface variant (the Kip405.tla case)
+    assert g(_dq("Which KIP does the Kip405.tla spec model?", "KIP-405"), es, docs) == "answer_id"
+    assert g(_dq("Which config replaced log.retention.ms?", "log.retention.ms"), es, docs)
+    # not giveaways: yes/no answers, an answer that only shares its subject id, paraphrase
+    assert g(_dq("Did Jun Rao object?", "Yes", kind="yes_no"), es, docs) is None
+    assert g(_dq("Which release fixed KAFKA-500?", "KAFKA-500 was fixed in 3.7.0"), es, docs) \
+        is None
+    assert g(_dq("Who proposed the broker protocol rollout?", "Dev"), es, docs) is None
+
+
+def test_giveaway_bridge_id_in_question(corpus):
+    docs = get_documents(corpus, ["email:e6:0", "email:e1:0"])
+    es = EvidenceSet(type="inference", doc_ids=["email:e6:0", "email:e1:0"],
+                     link="bridge:KIP-100", hint="")
+    d = _dq("Who proposed kip 100, the KIP cited in the regression report?", "Dev",
+            qtype="inference", gold=es.doc_ids)
+    assert draft_mod.giveaway(d, es, docs) == "bridge_id"
+    ok = d.model_copy(update={"question": "Who proposed the KIP cited in the regression report?"})
+    assert draft_mod.giveaway(ok, es, docs) is None
+
+
+def test_giveaway_long_ngram_copied_from_gold_doc(corpus):
+    docs = get_documents(corpus, ["email:e1:0"])
+    es = EvidenceSet(type="single_hop", doc_ids=["email:e1:0"], link="doc:email:e1:0")
+    copied = _dq("Which KIP covers the testing that Operators should perform, before enabling "
+                 "the change?", "KIP-100")
+    assert draft_mod.giveaway(copied, es, docs) == "ngram"  # 8 tokens, case/punct differ
+    seven = _dq("Which KIP covers the testing that operators should perform first?", "KIP-100")
+    assert draft_mod.giveaway(seven, es, docs) is None
+
+
+def test_giveaway_drafts_dropped(corpus):
+    llm = FakeLLM(question="What did the rollout plan across several releases, including "
+                           "compatibility notes, say?")
+    stats = draft_questions(corpus, {"single_hop": 1}, seed=1, llm=llm, oversample=1.0)
+    assert stats.dropped_giveaway == 3 and stats.kept == 0
+    assert set(_outcomes(corpus)) == {"dropped_giveaway"}
+    assert llm.count("SingleAskSchema") == 0  # deterministic, before any filter call
+
+
+def test_bridge_filter_needs_clue_and_fact_and_never_relabels(corpus):
+    every = _every_doc(corpus)
+    # Every doc states the fact, but none carries the identifying clue -> bridges survive.
+    llm = FakeLLM(answers_alone=every, bridge_clue=())
+    stats = draft_questions(corpus, {"inference": 2}, seed=3, llm=llm, oversample=1.0)
+    assert stats.kept == 2 and stats.dropped_single_source == 0
+    prompts = [t for n, t in llm.calls if n == "BridgeSourceSchema"]
+    assert prompts and all("different discussion" in t for t in prompts)  # hint is passed
+    assert llm.count("SingleSourceSchema") == 0  # bridges never use the core check
+    # A doc with both clue and fact answers alone: dropped, even with single-hop headroom.
+    corpus.execute("truncate questions, evidence_attempts")
+    corpus.commit()
+    llm = FakeLLM(answers_alone=every)
+    stats = draft_questions(corpus, {"inference": 2, "single_hop": 30}, seed=3, llm=llm,
+                            oversample=1.0)
+    assert stats.relabeled == 0 and stats.dropped_single_source >= 1
+    assert not corpus.execute(
+        "select 1 from questions where link like 'bridge:%' and type <> 'inference'"
+    ).fetchone()
+    assert "relabeled" not in _outcomes(corpus)
+
+
+def test_comparison_keeps_core_single_source_check(corpus):
+    llm = FakeLLM(answers_alone={"email:e4:0"})
+    stats = draft_questions(corpus, {"comparison": 1}, seed=3, llm=llm, oversample=1.0)
+    assert llm.count("SingleSourceSchema") >= 1 and llm.count("BridgeSourceSchema") == 0
+    assert stats.dropped_single_source >= 1
+
+
+def test_bridge_dropped_when_citing_doc_is_redundant(corpus):
+    # The about-docs alone answer: the question is not a bridge any more.
+    llm = FakeLLM(others_answerable=lambda ids: not ids & CITING)
+    draft_questions(corpus, {"inference": 6}, seed=3, llm=llm, oversample=1.0)
+    three = corpus.execute(
+        "select outcome from evidence_attempts where cardinality(evidence_doc_ids) = 3"
+    ).fetchall()
+    assert three and {o for (o,) in three} == {"dropped_shrunk"}
+    assert all(len(r[1]) == 2 for r in _rows(corpus))
+
+
+def test_temporal_prompt_asks_what_changed():
+    text = TYPE_INSTRUCTIONS["temporal"]
+    assert "what changed" in text and "why it changed" in text
+    assert "Never ask which came first, when something happened or how long" in text
+
+
+def test_attempts_recorded_with_prompt_version(corpus):
+    draft_questions(corpus, {"single_hop": 1}, seed=1, llm=FakeLLM(), oversample=1.0)
+    assert corpus.execute("select prompt_version from evidence_attempts").fetchall() == [
+        ("draft-v3",)]
+
+
+def test_attempts_per_kept_defaults_and_history(corpus):
+    assert draft_mod.attempts_per_kept(corpus) == draft_mod.DEFAULT_ATTEMPTS_PER_KEPT
+    assert draft_mod.DEFAULT_ATTEMPTS_PER_KEPT == {
+        "single_hop": 1.3, "null": 1.8, "comparison": 2.0, "inference": 3.5, "temporal": 3.5}
+    rows = (
+        [("comparison", "kept", "draft-v3")] * 4 + [("comparison", "dropped_unviable", "draft-v3")]
+        * 6  # 10 attempts, 4 kept -> 2.5
+        + [("null", "dropped_null_present", "draft-v3")] * 10  # nothing kept -> the attempt cap
+        + [("temporal", "kept", "draft-v2")] * 20  # other prompt version: ignored
+        + [("single_hop", "kept", "draft-v3")] * 3  # too few attempts: default
+    )
+    for n, (t, outcome, version) in enumerate(rows):
+        corpus.execute(
+            "insert into evidence_attempts (type, link, evidence_doc_ids, outcome, "
+            "prompt_version) values (%s, %s, '{}', %s, %s)", (t, f"l{n}", outcome, version),
+        )
+    corpus.commit()
+    f = draft_mod.attempts_per_kept(corpus)
+    assert f["comparison"] == 2.5 and f["null"] == draft_mod.ATTEMPT_CAP_FACTOR
+    assert f["temporal"] == 3.5 and f["single_hop"] == 1.3
+
+
+def test_cost_estimate_scales_with_attempts_per_kept():
+    model = get_settings().models.draft
+    one = dict.fromkeys(draft_mod.DEFAULT_ATTEMPTS_PER_KEPT, 1.0)
+    base = estimate_draft_cost_usd({"comparison": 6}, 400, model, oversample=1.0, factors=one)
+    double = estimate_draft_cost_usd({"comparison": 6}, 400, model, oversample=1.0)
+    assert double == pytest.approx(2.0 * base)  # default comparison factor 2.0
+    worst = estimate_draft_cost_usd({"comparison": 6}, 400, model, oversample=1.0,
+                                    worst_case=True)
+    assert worst == pytest.approx(3.0 * base)
+    # a factor above the attempt cap is capped: expected never exceeds the worst case
+    capped = estimate_draft_cost_usd({"inference": 6}, 400, model, oversample=1.0)
+    assert capped == pytest.approx(
+        estimate_draft_cost_usd({"inference": 6}, 400, model, oversample=1.0, worst_case=True))
+    est = draft_mod.estimate_draft_costs({"comparison": 6, "single_hop": 6}, 400, model,
+                                         oversample=1.0)
+    assert est.low < est.expected < est.high <= est.worst
+    line = draft_mod.format_cost_line(est)
+    assert re.fullmatch(r"expected \$\d+\.\d\d \(typical range \$\d+\.\d\d–\$\d+\.\d\d\), "
+                        r"worst case \$\d+\.\d\d", line)
+
+
+def test_cli_types_per_type_targets_only_those_types(corpus, cli_env, monkeypatch):
+    seen = {}
+
+    def fake_draft(conn, counts, **kw):
+        seen.update(counts=counts, **kw)
+        return draft_mod.DraftStats()
+
+    monkeypatch.setattr(cli, "draft_questions", fake_draft)
+    res = CliRunner().invoke(cli.app, ["questions", "draft", "--types", "inference,temporal",
+                                       "--per-type", "4", "--yes"])
+    assert res.exit_code == 0, res.output
+    assert seen["counts"] == {"inference": 4, "temporal": 4} and seen["oversample"] == 1.0
+    assert "typical range" in res.output
+
+
+def test_cli_dry_run_prints_estimate_without_client(corpus, cli_env, monkeypatch):
+    monkeypatch.setattr(draft_mod, "_default_llm", _boom)
+    monkeypatch.setattr(cli, "draft_questions", _boom)
+    res = CliRunner().invoke(cli.app, ["questions", "draft", "--types", "inference,temporal",
+                                       "--per-type", "6", "--dry-run"])
+    assert res.exit_code == 0, res.output
+    assert "12 questions" in res.output and "worst case" in res.output
+
+
+@pytest.mark.parametrize("args", [
+    ["--types", "inference", "--pilot"],
+    ["--types", "inference", "--counts", "null=1"],
+    ["--types", "bogus"],
+    ["--types", "inference,inference"],
+    ["--per-type", "3", "--pilot"],
+])
+def test_cli_rejects_bad_type_selection(corpus, cli_env, args):
+    res = CliRunner().invoke(cli.app, ["questions", "draft", *args, "--yes"])
+    assert res.exit_code != 0

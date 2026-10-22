@@ -19,7 +19,13 @@ from kgrag.extract.llm import (
 from kgrag.extract.pipeline import persist_extractions
 from kgrag.ingest.fetch import fetch_month, month_range
 from kgrag.ingest.pipeline import ingest as run_ingest
-from kgrag.questions.draft import avg_doc_tokens, draft_questions, estimate_draft_cost_usd
+from kgrag.questions.draft import (
+    attempts_per_kept,
+    avg_doc_tokens,
+    draft_questions,
+    estimate_draft_costs,
+    format_cost_line,
+)
 from kgrag.questions.review import review_session
 from kgrag.questions.split import AlreadySplitError, persist_splits
 from kgrag.graph.build import build_graph
@@ -315,31 +321,61 @@ def _parse_counts(spec: str) -> dict[str, int]:
     return counts
 
 
+def _parse_types(spec: str, per_type: int) -> dict[str, int]:
+    names = [n.strip() for n in spec.split(",") if n.strip()]
+    if not names:
+        raise typer.BadParameter("expected type,type,...")
+    unknown = set(names) - set(QUESTION_TYPES)
+    if unknown:
+        raise typer.BadParameter(f"unknown question types: {sorted(unknown)}")
+    if len(set(names)) != len(names):
+        raise typer.BadParameter("duplicate question type")
+    if per_type < 1:
+        raise typer.BadParameter("--per-type must be at least 1")
+    return dict.fromkeys(names, per_type)
+
+
 @questions_app.command("draft")
 def questions_draft(
     pilot: bool = typer.Option(False, "--pilot", help="Draft 6 questions per type."),
     counts: str | None = typer.Option(None, help="e.g. single_hop=100,inference=55,null=40"),
+    types: str | None = typer.Option(
+        None, "--types", help="Targeted pilot of only these types, e.g. inference,temporal "
+        "(no oversample)."),
+    per_type: int | None = typer.Option(
+        None, "--per-type", help="Questions per type with --types (default 6)."),
     seed: int = typer.Option(13, help="Sampling seed."),
     yes: bool = typer.Option(False, "--yes", help="Skip the cost-guard confirmation."),
+    dry_run: bool = typer.Option(False, "--dry-run", help="Print the cost estimate and exit."),
 ) -> None:
     """Sample evidence from Postgres and draft questions with an LLM (status 'draft')."""
-    if pilot == (counts is not None):
-        raise typer.BadParameter("pass exactly one of --pilot or --counts")
-    wanted = dict.fromkeys(QUESTION_TYPES, 6) if pilot else _parse_counts(counts or "")
-    oversample = 1.0 if pilot else DEFAULT_OVERSAMPLE
+    if sum((pilot, counts is not None, types is not None)) != 1:
+        raise typer.BadParameter("pass exactly one of --pilot, --counts or --types")
+    if per_type is not None and types is None:
+        raise typer.BadParameter("--per-type needs --types")
+    if types is not None:
+        wanted = _parse_types(types, 6 if per_type is None else per_type)
+    else:
+        wanted = dict.fromkeys(QUESTION_TYPES, 6) if pilot else _parse_counts(counts or "")
+    oversample = DEFAULT_OVERSAMPLE if counts is not None else 1.0
     settings = get_settings()
     conn = connect()
     try:
         apply_migrations(conn)
         model = settings.models.draft
         avg = avg_doc_tokens(conn)
-        expected = estimate_draft_cost_usd(wanted, avg, model, oversample=oversample)
-        cost = estimate_draft_cost_usd(wanted, avg, model, oversample=oversample, worst_case=True)
+        factors = attempts_per_kept(conn)
+        est = estimate_draft_costs(wanted, avg, model, oversample=oversample, factors=factors)
         typer.echo(
             f"{sum(wanted.values())} questions (x{oversample} oversample), avg doc {avg} tokens; "
-            f"expected estimated cost ${expected:.2f}, worst-case ${cost:.2f} "
+            f"attempts per kept: "
+            + ", ".join(f"{t} {factors[t]:.2f}" for t in wanted)
+            + f"\nestimated cost: {format_cost_line(est)} "
             f"(guard ${settings.cost_guard_usd:.2f} applies to the worst case)"
         )
+        if dry_run:
+            return
+        cost = est.worst
         if cost > settings.cost_guard_usd and not yes:
             if not sys.stdin.isatty():
                 typer.echo("Estimated cost exceeds the guard; pass --yes to proceed.", err=True)
