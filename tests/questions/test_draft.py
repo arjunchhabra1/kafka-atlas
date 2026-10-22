@@ -1,4 +1,5 @@
 import re
+from datetime import UTC, datetime
 
 import pytest
 from langchain_core.runnables import RunnableLambda
@@ -27,7 +28,7 @@ from kgrag.questions.draft import (
     null_question_absent,
 )
 from kgrag.questions.sample import EvidenceSet, sample_evidence_sets
-from kgrag.store.repo import get_documents
+from kgrag.store.repo import Document, get_documents
 
 
 def _text(messages) -> str:
@@ -105,7 +106,7 @@ def _rows(conn):
 
 
 def test_prompt_version():
-    assert DRAFT_PROMPT_VERSION == "draft-v4"
+    assert DRAFT_PROMPT_VERSION == "draft-v5"
 
 
 def test_draft_question_builds_from_set_and_docs(corpus):
@@ -707,6 +708,46 @@ def test_giveaway_bridge_id_in_question(corpus):
     assert draft_mod.giveaway(d, es, docs) == "bridge_id"
     ok = d.model_copy(update={"question": "Who proposed the KIP cited in the regression report?"})
     assert draft_mod.giveaway(ok, es, docs) is None
+
+
+def _doc(doc_id, sender, subject, text="Some discussion text."):
+    return Document(doc_id=doc_id, source_kind="jira" if doc_id.startswith("jira") else "email",
+                    source_id=doc_id, chunk_index=0, text=text, token_count=5,
+                    date=datetime(2026, 1, 1, tzinfo=UTC), sender=sender, subject=subject)
+
+
+def test_giveaway_bridge_title():
+    citing = _doc("email:c:0", "Luke Chen", "Re: [VOTE] 3.7.1 RC1")
+    about = _doc("jira:1", "Satish Duggana",
+                 "KAFKA-900 Remote storage metadata dump tool for log segments")
+    es = EvidenceSet(type="inference", doc_ids=[citing.doc_id, about.doc_id],
+                     link="bridge:KAFKA-900")
+
+    def g(question):
+        return draft_mod.giveaway(_dq(question, "4.0.0", qtype="inference", gold=es.doc_ids),
+                                  es, [citing, about])
+
+    assert g("Which release fixed the remote metadata dump tool ticket?") == "bridge_title"
+    # Two title words are not enough; the clue from the citing doc is fine.
+    assert g("Which release fixed the storage ticket Luke Chen flagged in the RC1 vote?") is None
+    assert g("Which release fixed the remote dump ticket?") is None
+
+
+def test_giveaway_metadata_only_comparison():
+    docs = [_doc("jira:1", "A", "KAFKA-1 x"), _doc("jira:2", "B", "KAFKA-2 y")]
+    es = EvidenceSet(type="comparison", doc_ids=["jira:1", "jira:2"], link="related:x")
+
+    def g(question):
+        return draft_mod.giveaway(_dq(question, "No", qtype="comparison", kind="yes_no",
+                                      gold=es.doc_ids), es, docs)
+
+    assert g("Did KAFKA-1 and KAFKA-2 ship in the same Kafka release?") == "metadata_comparison"
+    assert g("Did the same person resolve both KAFKA-1 and KAFKA-2?") == "metadata_comparison"
+    assert g("Which release shipped fixes for both KAFKA-1 and KAFKA-2?") \
+        == "metadata_comparison"
+    assert g("Did KAFKA-1 and KAFKA-2 share the same resolution?") == "metadata_comparison"
+    assert g("How does the scope of KAFKA-1 differ from KAFKA-2?") is None
+    assert g("Did the same person start the vote for both KIPs?") is None
 
 
 def test_giveaway_long_ngram_copied_from_gold_doc(corpus):

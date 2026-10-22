@@ -27,7 +27,7 @@ from kgrag.questions.sample import (
 from kgrag.store.repo import Document, QuestionRow, get_documents, insert_question, log_failure
 from kgrag.tokens import count_tokens
 
-DRAFT_PROMPT_VERSION = "draft-v4"
+DRAFT_PROMPT_VERSION = "draft-v5"
 MULTI_HOP: tuple[QuestionType, ...] = ("inference", "comparison", "temporal")
 # Randomly sampled single-hop goes first so ID-linked relabels never displace it.
 DRAFT_ORDER: tuple[QuestionType, ...] = ("single_hop", *MULTI_HOP, "null")
@@ -40,6 +40,11 @@ MAX_QUESTION_WORDS = 30
 # date-centric: stored answer_kind 'date', or matched by `is_date_centric`.
 DATE_SHARE_CAP = 0.15
 GIVEAWAY_NGRAM = 8  # a question sharing this many consecutive tokens with a gold doc copies it
+# A bridge question reusing at least this many (and this share) of the content words of its
+# bridge entity's title lets the about-doc's subject answer it alone. Tuned on the full
+# review's inference labels: catches ~40% of rejected drafts, ~11% of accepted ones.
+TITLE_MIN_WORDS = 3
+TITLE_MIN_SHARE = 0.5
 ATTEMPT_CAP_FACTOR = 3  # per type, at most this many drafting attempts per kept-draft target
 NULL_CHECK_MAX_DOCS = 20  # candidate docs an LLM reads to confirm a null question is unanswered
 NULL_CHECK_BATCH_TOKENS = 6000
@@ -103,8 +108,11 @@ TYPE_INSTRUCTIONS: dict[str, str] = {
         "3.7.0 release candidate' or 'the KIP Jun Rao cited as already propagating the high "
         "watermark'), never by its ID or title, and ask for ONE fact that only the other "
         "document(s) state (who proposed or objected, what it changed, why, which release "
-        "fixed it). Prefer facts from discussion: decisions, objections, reasons, who said, "
-        "proposed or objected. A question that joins two separate facts with 'and' is NOT "
+        "fixed it). Do not reuse the distinctive words of the entity's own title or summary "
+        "(its subject line): paraphrasing the title lets that document answer alone. Never "
+        "name the person who wrote the document stating the answer, unless they also wrote "
+        "the first document. Prefer facts from discussion: decisions, objections, reasons, who "
+        "said, proposed or objected. A question that joins two separate facts with 'and' is NOT "
         "acceptable. Set viable=false if the first document says nothing distinctive about "
         "the entity, or if every document states the same thing about it."
     ),
@@ -114,8 +122,9 @@ TYPE_INSTRUCTIONS: dict[str, str] = {
         "shipped each, whether they overlap or conflict) and needs BOTH documents to answer. "
         "Name both items, but do not ask WHICH of the two does something (the answer would "
         "then be named in the question). Do NOT ask which came first and do not compare "
-        "dates. Set "
-        "viable=false if dates are the only dimension the documents share."
+        "dates, and never compare only ticket metadata (fix release, resolution, resolver, "
+        "component) of items with nothing else in common. Set viable=false if dates or such "
+        "metadata are the only dimension the documents share."
     ),
     "temporal": (
         "The first document is the ORIGINAL proposal (or first message) about a KIP, ticket or "
@@ -448,13 +457,50 @@ def _mentions(text: str, ident: str) -> bool:
     return body is not None and _py(body).search(text) is not None
 
 
+_SUBJECT_PREFIX = re.compile(r"^(?:\s*(?:re|fwd?|aw)\s*:|\s*\[[^\]]*\])+", re.IGNORECASE)
+_SUBJECT_ID = re.compile(r"\b(?:KIP|KAFKA)-\d+\b:?", re.IGNORECASE)
+_TITLE_STOP = frozenset(
+    "the of to for in on and or with by from as at is are be via into its it this that which "
+    "who what when why how did does do was were has have had kafka apache kip ticket jira add "
+    "adding support new use using should make allow allows discuss vote".split()
+)
+# A comparison of nothing but ticket metadata: same release / resolution / resolver.
+_SAME_METADATA = re.compile(
+    r"\b(?:ship(?:ped)?|released?|fixed|resolved)\b[^?]{0,40}?\bin the same\b"
+    r"|\bsame (?:resolution|resolver|fix version|release)\b|\bsame person resolve"
+    r"|\bwhich (?:kafka )?release (?:shipped|fixed|included)\b[^?]*\bboth\b",
+    re.IGNORECASE,
+)
+
+
+def _stem(word: str) -> str:
+    return word[:5]
+
+
+def _title_words(subject: str) -> set[str]:
+    """Content words of a thread subject or Jira title (prefixes and KIP/ticket ids removed)."""
+    title = _SUBJECT_ID.sub(" ", _SUBJECT_PREFIX.sub("", subject))
+    return {w for w in _norm_tokens(title) if len(w) > 2 and w not in _TITLE_STOP}
+
+
+def _bridge_title_reused(question: str, about: list[Document]) -> bool:
+    q = {_stem(w) for w in _norm_tokens(question)}
+    for doc in about:
+        words = _title_words(doc.subject)
+        hits = sum(_stem(w) in q for w in words)
+        if hits >= TITLE_MIN_WORDS and hits >= TITLE_MIN_SHARE * len(words):
+            return True
+    return False
+
+
 def giveaway(draft: DraftQuestion, es: EvidenceSet, docs: list[Document]) -> str | None:
     """Why the question gives itself away, or None.
 
     'answer': the normalized answer appears in the question; 'answer_id': an answer that is
     only identifiers has all of them in the question (any surface variant); 'bridge_id': a
-    bridge question names its bridge entity; 'ngram': the question copies GIVEAWAY_NGRAM
-    consecutive tokens from a gold doc.
+    bridge question names its bridge entity; 'bridge_title': it reuses the bridge entity's title words;
+    'metadata_comparison': a comparison of only fix release / resolution / resolver;
+    'ngram': the question copies GIVEAWAY_NGRAM consecutive tokens from a gold doc.
     """
     q = _norm_tokens(draft.question)
     if draft.type != "null" and draft.answer_kind != "yes_no":
@@ -467,8 +513,15 @@ def giveaway(draft: DraftQuestion, es: EvidenceSet, docs: list[Document]) -> str
         if ids and all(_mentions(draft.question, i) for i in ids):
             return "answer_id"
     if es.type == "inference" and es.link.startswith("bridge:"):
-        if _mentions(draft.question, es.link.removeprefix("bridge:")):
+        bridge = es.link.removeprefix("bridge:")
+        if _mentions(draft.question, bridge):
             return "bridge_id"
+        about = [d for d in docs if _mentions(d.subject, bridge)]
+        citing = [d for d in docs if d.doc_id not in {a.doc_id for a in about}]
+        if about and citing and _bridge_title_reused(draft.question, about):
+            return "bridge_title"
+    if es.type == "comparison" and _SAME_METADATA.search(draft.question):
+        return "metadata_comparison"
     n = GIVEAWAY_NGRAM
     grams = {tuple(q[i:i + n]) for i in range(len(q) - n + 1)}
     for doc in docs:
