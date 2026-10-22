@@ -35,12 +35,29 @@ BRIDGE_THREE_DOCS = 0.25  # inference: share of bridge sets with a second "about
 # docs (a later vote, release or design thread on the same id) are always tried first.
 MAX_JIRA_BRIDGE_SHARE = 0.25
 LATER_ABOUT_SHARE = 0.8  # inference: chance that later email threads are tried first
-# temporal: the later email restates the earlier one when it contains this share of the
-# earlier email's content words (a summary needs no earlier doc to say what changed).
-RESTATE_OVERLAP = 0.5
-_REPLY_OR_VOTE = re.compile(r"^\s*(re|aw)\s*:|\[vote\]", re.IGNORECASE)
+# temporal: the later email restates the original when it contains this share of the
+# original's content words (a repost needs no earlier doc to say what changed). A revision
+# announcement names the delta, so it shares much of the original's vocabulary by design;
+# only a near-verbatim repost counts.
+RESTATE_OVERLAP = 0.8
+# temporal: phrases announcing a change to a proposal (case-insensitive, word-bounded).
+_REVISION_STRONG = re.compile(
+    r"\b(?:updated the (?:kip|proposal|design|wiki|doc|document)"
+    r"|(?:i|we)(?:'ve|\u2019ve| have) (?:just |now )?updated"
+    r"|revised|changed the (?:proposal|kip|design)"
+    r"|based on (?:the |your |all the )?(?:feedback|comments|discussion)"
+    r"|addressed (?:the |your |all the |all )?(?:comments|feedback|concerns)"
+    r"|renamed|dropped the|we decided to)\b",
+    re.IGNORECASE,
+)
+# Weaker phrases that often describe alternatives rather than a change: only counted in a
+# reply (a later step of a discussion), and sampled after the strong announcements.
+_REVISION_WEAK = re.compile(r"\b(?:no longer|instead of)\b", re.IGNORECASE)
+REVISION_WEAK_SHARE = 0.2  # temporal: share of sets drawn from weak announcements
+_REPLY = re.compile(r"^\s*(re|aw)\s*:", re.IGNORECASE)
+_DISCUSS = re.compile(r"\[discuss\]", re.IGNORECASE)
 _SUMMARY = re.compile(r"\[(result|results|announce|summary)\]", re.IGNORECASE)
-KIP_SHARE = 0.75  # comparison / temporal: share of sets built around KIPs rather than tickets
+KIP_SHARE = 0.75  # comparison: share of sets built around KIPs rather than tickets
 MAX_WORD_BUCKET = 40  # title words shared by more items than this are too generic to relate them
 MAX_COMENTION = 4  # a doc naming more ids of one kind than this does not relate them
 MIN_SHARED_WORDS = 2  # titles must share this many distinctive words (1 with a common release)
@@ -76,6 +93,7 @@ class _Doc:
     subject_ids: frozenset[str] = frozenset()  # ids in the subject: the doc is ABOUT them
     title: str = ""  # subject, used to relate items by topic
     words: frozenset[str] = frozenset()  # content words of the text (restatement heuristic)
+    revision: int = 0  # announces a revision of a proposal: 2 strong phrase, 1 weak, 0 none
 
 
 def is_noisy(text: str) -> bool:
@@ -88,6 +106,15 @@ def is_noisy(text: str) -> bool:
 
 def content_words(text: str) -> frozenset[str]:
     return frozenset(w for w in re.findall(r"[a-z][a-z0-9]{3,}", text.lower()) if w not in _STOP)
+
+
+def revision_strength(text: str, subject: str) -> int:
+    """2 if the text announces a change to a proposal, 1 for a weaker hint in a reply, else 0."""
+    if _REVISION_STRONG.search(text):
+        return 2
+    if _REPLY.match(subject) and _REVISION_WEAK.search(text):
+        return 1
+    return 0
 
 
 def _ids_in(text: str) -> frozenset[str]:
@@ -154,8 +181,9 @@ def _load_docs(conn: psycopg.Connection) -> list[_Doc]:
         else:
             ids = frozenset(chunk_ids.get(doc_id, ()))
             about = _ids_in(subject)
+        revision = revision_strength(text, subject) if kind == "email" else 0
         docs.append(_Doc(doc_id, kind, source_id, thread, date, ids | about, about, subject,
-                         content_words(text)))
+                         content_words(text), revision))
     return docs
 
 
@@ -298,49 +326,87 @@ def _inference(docs: list[_Doc], rng: random.Random) -> Iterator[EvidenceSet]:
     return counted()
 
 
-def _split_kinds(keys) -> tuple[list[str], list[str]]:
-    keys = sorted(keys)
-    return [k for k in keys if _id_kind(k) == "KIP"], [k for k in keys if _id_kind(k) != "KIP"]
-
-
 def restates(later: _Doc, earlier: _Doc) -> bool:
-    """True when the later doc repeats most of the earlier doc's content words."""
+    """True when the later doc repeats nearly all of the earlier doc's content words."""
     if not earlier.words:
         return False
     return len(earlier.words & later.words) / len(earlier.words) >= RESTATE_OVERLAP
 
 
 def temporal_pair_ok(a: _Doc, b: _Doc) -> bool:
-    """Two emails a week or more apart where the later one is not a summary and either is a
-    reply or vote (a step in the lifecycle) or does not restate the earlier one."""
+    """An original email `a` and a later revision announcement `b`: two emails from different
+    messages a week or more apart, where `b` is not a summary and does not repost `a`."""
     return (
-        a.kind == b.kind == "email" and a.source_id != b.source_id
+        a.kind == b.kind == "email" and a.source_id != b.source_id and b.revision > 0
         and b.date - a.date >= MIN_TEMPORAL_GAP and not _SUMMARY.search(b.title)
-        and (_REPLY_OR_VOTE.search(b.title) is not None or not restates(b, a))
+        and not restates(b, a)
     )
 
 
-def _temporal(docs: list[_Doc], rng: random.Random) -> Iterator[EvidenceSet]:
-    """Pairs of emails about one KIP / ticket, at least a week apart (KIPs preferred), where
-    the later email does not restate the change: what changed needs both."""
-    groups = _about(docs)
+def _chunk_no(d: _Doc) -> int:
+    tail = d.doc_id.rsplit(":", 1)[-1]
+    return int(tail) if tail.isdigit() else 0
 
-    def build(ident: str) -> EvidenceSet | None:
-        pool = _prefer_root([d for d in groups[ident] if d.kind == "email"], rng)
-        for a in pool:
-            for b in pool:
-                if temporal_pair_ok(a, b):
-                    return EvidenceSet(
-                        type="temporal", doc_ids=[a.doc_id, b.doc_id], link=f"temporal:{ident}",
-                        hint=f"Both documents are about {ident}: the earlier one "
-                             f"({a.date:%Y-%m-%d}, subject {a.title!r}) and the later one "
-                             f"({b.date:%Y-%m-%d}, subject {b.title!r}).",
-                    )
+
+def _chrono(d: _Doc) -> tuple:
+    return (d.date, d.source_id, _chunk_no(d))
+
+
+def _revision_ids(b: _Doc) -> list[str]:
+    """The KIP / ticket a revision announcement is about: its subject ids, else its only id."""
+    ids = b.subject_ids or (b.ids if len(b.ids) == 1 else frozenset())
+    return sorted(ids, key=lambda i: (_id_kind(i) != "KIP", i))
+
+
+def _temporal(docs: list[_Doc], rng: random.Random) -> Iterator[EvidenceSet]:
+    """Revision pairs: a later email announcing a change to a proposal ("I've updated the KIP",
+    "based on the feedback", ...) and the ORIGINAL proposal: the earliest email of the same
+    thread, else the earliest [DISCUSS] email mentioning the same KIP / ticket. What changed
+    (or why) needs both: the original state from the first, the new state or reason from the
+    second. Emails only; strong announcements are preferred over weak ones."""
+    emails = sorted((d for d in docs if d.kind == "email"), key=_chrono)
+    by_thread: dict[str, list[_Doc]] = {}
+    discuss: dict[str, list[_Doc]] = {}
+    for d in emails:
+        if d.thread:
+            by_thread.setdefault(d.thread, []).append(d)
+        if _DISCUSS.search(d.title):
+            for ident in d.ids:
+                discuss.setdefault(ident, []).append(d)
+    revisions = {d.doc_id: d for d in emails if d.revision > 0}
+
+    def originals(b: _Doc) -> Iterator[tuple[_Doc, str]]:
+        ids = _revision_ids(b)
+        thread = [d for d in by_thread.get(b.thread, ()) if d.date < b.date
+                  and d.source_id != b.source_id]
+        if thread:
+            yield thread[0], ids[0] if ids else ""
+        for ident in ids:
+            cands = [d for d in discuss.get(ident, ()) if d.date < b.date
+                     and d.source_id != b.source_id]
+            # a [DISCUSS] email ABOUT the id (in its subject) first, else one mentioning it
+            about = [d for d in cands if ident in d.subject_ids]
+            if about or cands:
+                yield (about or cands)[0], ident
+
+    def build(key: str) -> EvidenceSet | None:
+        b = revisions[key]
+        for a, ident in originals(b):
+            if temporal_pair_ok(a, b):
+                return EvidenceSet(
+                    type="temporal", doc_ids=[a.doc_id, b.doc_id],
+                    link=f"temporal:{ident or 'thread:' + b.thread}",
+                    hint=f"The earlier document is the original proposal or first message about "
+                         f"{ident or 'this discussion'} ({a.date:%Y-%m-%d}, subject {a.title!r}); the later one "
+                         f"({b.date:%Y-%m-%d}, subject {b.title!r}) announces a revision or "
+                         f"change to it.",
+                )
         return None
 
-    kips, tickets = _split_kinds(groups)
-    return _mix(rng, [(_collect(kips, build, rng), KIP_SHARE),
-                      (_collect(tickets, build, rng), 1 - KIP_SHARE)])
+    strong = sorted(k for k, d in revisions.items() if d.revision == 2)
+    weak = sorted(k for k, d in revisions.items() if d.revision == 1)
+    return _mix(rng, [(_collect(strong, build, rng), 1 - REVISION_WEAK_SHARE),
+                      (_collect(weak, build, rng), REVISION_WEAK_SHARE)])
 
 
 def _title_words(title: str) -> set[str]:

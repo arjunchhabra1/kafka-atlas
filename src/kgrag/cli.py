@@ -338,7 +338,7 @@ def _parse_types(spec: str, per_type: int) -> dict[str, int]:
 @questions_app.command("draft")
 def questions_draft(
     pilot: bool = typer.Option(False, "--pilot", help="Draft 6 questions per type."),
-    counts: str | None = typer.Option(None, help="e.g. single_hop=100,inference=55,null=40"),
+    counts: str | None = typer.Option(None, help="e.g. single_hop=100,inference=80,null=40"),
     types: str | None = typer.Option(
         None, "--types", help="Targeted pilot of only these types, e.g. inference,temporal "
         "(no oversample)."),

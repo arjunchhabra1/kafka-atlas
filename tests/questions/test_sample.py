@@ -3,6 +3,7 @@ import sys
 import textwrap
 from datetime import UTC, datetime, timedelta
 
+import pytest
 from psycopg.conninfo import make_conninfo
 
 from kgrag.extract.regex_ids import extract_ids
@@ -18,7 +19,9 @@ from kgrag.questions.sample import (
     _single_hop,
     is_noisy,
     related_pairs,
+    revision_strength,
     sample_evidence_sets,
+    temporal_pair_ok,
 )
 from kgrag.store.repo import get_documents
 from kgrag.tokens import count_tokens
@@ -266,10 +269,10 @@ def test_single_hop_jira_share_is_small():
     assert 0.08 <= share <= 0.22
 
 
-def _d(name, kind, thread, when, about=(), cites=(), title="", words=""):
+def _d(name, kind, thread, when, about=(), cites=(), title="", words="", revision=0):
     return _Doc(f"{kind}:{name}", kind, name, thread, datetime(2026, 1, when, tzinfo=UTC),
                 frozenset(about) | frozenset(cites), frozenset(about), title,
-                frozenset(words.split()))
+                frozenset(words.split()), revision)
 
 
 def test_inference_prefers_email_bridges_and_caps_jira_endings():
@@ -305,30 +308,98 @@ def test_inference_prefers_later_email_threads():
     assert sum(firsts) >= 16
 
 
-def test_temporal_pairs_are_emails_without_restatement():
+@pytest.mark.parametrize("text", [
+    "I've updated the KIP to use a single epoch.",
+    "We have updated the wiki page.",
+    "Updated the proposal after the call.",
+    "Here is the REVISED design.",
+    "Based on the feedback, the config is gone.",
+    "I addressed the comments from Jun.",
+    "The method was renamed to close().",
+    "We dropped the second RPC.",
+    "In the end we decided to keep the old format.",
+    "I just changed the proposal accordingly.",
+])
+def test_revision_strength_strong_phrases(text):
+    assert revision_strength(text, "[DISCUSS] KIP-9") == 2
+
+
+def test_revision_strength_weak_phrases_only_in_replies():
+    text = "The flag is no longer needed, use the timeout instead of polling."
+    assert revision_strength(text, "Re: [DISCUSS] KIP-9") == 1
+    assert revision_strength(text, "[DISCUSS] KIP-9") == 0
+    # word-bounded: no match inside other words, and plain discussion is not a revision
+    assert revision_strength("An unrevised, unrenamed draft; please review.", "Re: x") == 0
+    assert revision_strength("What do you think about the design?", "Re: x") == 0
+
+
+def _revision_docs():
     words = "broker fencing epoch controller quorum snapshot"
-    docs = [
+    return [
         _d("root", "email", "t1", 1, about=["KIP-9"], title="[DISCUSS] KIP-9: fencing",
            words=words),
-        # later, restates the proposal: excluded
-        _d("restate", "email", "t2", 10, about=["KIP-9"], title="[DISCUSS] KIP-9 v2",
-           words=words),
-        # later reply: included even though it overlaps
-        _d("reply", "email", "t1", 12, about=["KIP-9"], title="Re: [DISCUSS] KIP-9: fencing",
-           words=words),
-        # later vote thread with little overlap: included
-        _d("vote", "email", "t3", 20, about=["KIP-9"], title="[VOTE] KIP-9", words="plus one"),
-        # summaries and Jira events never end a temporal pair
+        _d("chat", "email", "t1", 3, about=["KIP-9"], title="Re: [DISCUSS] KIP-9: fencing",
+           words="question about epochs"),  # no announcement: never the later doc
+        # revision reply in the same thread: paired with the thread's first email
+        _d("rev", "email", "t1", 12, about=["KIP-9"], title="Re: [DISCUSS] KIP-9: fencing",
+           words="fencing epoch moved metadata", revision=2),
+        # new thread announcing a revision: paired with the earliest [DISCUSS] about KIP-9
+        _d("v2", "email", "t2", 15, about=["KIP-9"], title="[DISCUSS] KIP-9 v2",
+           words="renamed epoch field", revision=2),
+        # a near-verbatim repost of the original: excluded
+        _d("repost", "email", "t3", 18, about=["KIP-9"], title="[DISCUSS] KIP-9 again",
+           words=words + " updated", revision=2),
+        # summaries and Jira events never end (or start) a revision pair
         _d("result", "email", "t4", 25, about=["KIP-9"], title="[RESULT][VOTE] KIP-9",
-           words="accepted"),
-        _d("j", "jira", "jira:KIP-9", 26, about=["KIP-9"]),
+           words="accepted updated", revision=2),
+        _d("j", "jira", "jira:KIP-9", 26, about=["KIP-9"], revision=2),
+        # KIP-7: only a [DISCUSS] email MENTIONING it (regex mention) exists before the revision
+        _d("road", "email", "t5", 2, cites=["KIP-7"], title="[DISCUSS] Road map",
+           words="plans releases"),
+        _d("j7", "jira", "jira:KIP-7", 1, about=["KIP-7"]),
+        _d("rev7", "email", "t6", 20, about=["KIP-7"], title="Re: KIP-7 status",
+           words="dropped second request", revision=1),
+        # too soon after the original (under a week): excluded
+        _d("root8", "email", "t8", 1, about=["KIP-8"], title="[DISCUSS] KIP-8", words="x y"),
+        _d("rev8", "email", "t8", 4, about=["KIP-8"], title="Re: [DISCUSS] KIP-8",
+           words="updated", revision=2),
     ]
-    pairs = {tuple(es.doc_ids) for seed in range(30)
-             for es in _temporal(docs, _rng(seed, "temporal"))}
-    assert pairs
-    allowed = {("email:root", "email:reply"), ("email:root", "email:vote"),
-               ("email:restate", "email:vote"), ("email:reply", "email:vote"),
-               ("email:restate", "email:reply")}
-    assert pairs <= allowed and len(pairs) >= 3
-    for es in _temporal(docs, _rng(1, "temporal")):
-        assert len(es.doc_ids) == 2 and "earlier" in es.hint and "later" in es.hint
+
+
+def test_temporal_revision_pairs_original_and_announcement():
+    docs = _revision_docs()
+    sets = [es for seed in range(20) for es in _temporal(docs, _rng(seed, "temporal"))]
+    pairs = {tuple(es.doc_ids) for es in sets}
+    assert pairs == {("email:root", "email:rev"), ("email:root", "email:v2"),
+                     ("email:road", "email:rev7")}
+    by_pair = {tuple(es.doc_ids): es for es in sets}
+    assert by_pair[("email:road", "email:rev7")].link == "temporal:KIP-7"
+    es = by_pair[("email:root", "email:rev")]
+    assert es.type == "temporal" and es.link == "temporal:KIP-9"
+    assert "original" in es.hint and "revision" in es.hint
+    kinds = {d.doc_id: d.kind for d in docs}
+    assert all(kinds[i] == "email" for es in sets for i in es.doc_ids)
+
+
+def test_temporal_pair_ok_rules():
+    by = {d.doc_id.split(":")[1]: d for d in _revision_docs()}
+    assert temporal_pair_ok(by["root"], by["rev"])
+    assert not temporal_pair_ok(by["root"], by["chat"])  # no announcement
+    assert not temporal_pair_ok(by["root"], by["repost"])  # reposts the original
+    assert not temporal_pair_ok(by["root"], by["result"])  # summary
+    assert not temporal_pair_ok(by["root"], by["j"])  # Jira event
+    assert not temporal_pair_ok(by["j7"], by["rev7"])  # Jira event as the original
+    assert not temporal_pair_ok(by["root8"], by["rev8"])  # under a week apart
+
+
+def test_temporal_revision_pairs_deterministic():
+    docs = _revision_docs()
+    for seed in range(5):
+        assert (list(_temporal(docs, _rng(seed, "temporal")))
+                == list(_temporal(docs, _rng(seed, "temporal"))))
+
+
+def test_temporal_corpus_pairs_revision_with_original_proposal(corpus):
+    sets = [es for seed in range(5) for es in sample_evidence_sets(corpus, "temporal", 10, seed)]
+    assert {tuple(es.doc_ids) for es in sets} == {("email:e1:0", "email:e2:0")}
+    assert all(es.link == "temporal:KIP-100" for es in sets)

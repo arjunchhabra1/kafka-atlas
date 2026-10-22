@@ -105,7 +105,7 @@ def _rows(conn):
 
 
 def test_prompt_version():
-    assert DRAFT_PROMPT_VERSION == "draft-v3"
+    assert DRAFT_PROMPT_VERSION == "draft-v4"
 
 
 def test_draft_question_builds_from_set_and_docs(corpus):
@@ -770,14 +770,16 @@ def test_bridge_dropped_when_citing_doc_is_redundant(corpus):
 
 def test_temporal_prompt_asks_what_changed():
     text = TYPE_INSTRUCTIONS["temporal"]
-    assert "what changed" in text and "why it changed" in text
+    assert "what changed" in text and "why it was changed" in text
+    assert "ORIGINAL" in text and "REVISION" in text
+    assert "comparing the two" in text
     assert "Never ask which came first, when something happened or how long" in text
 
 
 def test_attempts_recorded_with_prompt_version(corpus):
     draft_questions(corpus, {"single_hop": 1}, seed=1, llm=FakeLLM(), oversample=1.0)
     assert corpus.execute("select prompt_version from evidence_attempts").fetchall() == [
-        ("draft-v3",)]
+        (DRAFT_PROMPT_VERSION,)]
 
 
 def test_attempts_per_kept_defaults_and_history(corpus):
@@ -785,11 +787,11 @@ def test_attempts_per_kept_defaults_and_history(corpus):
     assert draft_mod.DEFAULT_ATTEMPTS_PER_KEPT == {
         "single_hop": 1.3, "null": 1.8, "comparison": 2.0, "inference": 3.5, "temporal": 3.5}
     rows = (
-        [("comparison", "kept", "draft-v3")] * 4 + [("comparison", "dropped_unviable", "draft-v3")]
+        [("comparison", "kept", DRAFT_PROMPT_VERSION)] * 4 + [("comparison", "dropped_unviable", DRAFT_PROMPT_VERSION)]
         * 6  # 10 attempts, 4 kept -> 2.5
-        + [("null", "dropped_null_present", "draft-v3")] * 10  # nothing kept -> the attempt cap
+        + [("null", "dropped_null_present", DRAFT_PROMPT_VERSION)] * 10  # nothing kept -> the attempt cap
         + [("temporal", "kept", "draft-v2")] * 20  # other prompt version: ignored
-        + [("single_hop", "kept", "draft-v3")] * 3  # too few attempts: default
+        + [("single_hop", "kept", DRAFT_PROMPT_VERSION)] * 3  # too few attempts: default
     )
     for n, (t, outcome, version) in enumerate(rows):
         corpus.execute(

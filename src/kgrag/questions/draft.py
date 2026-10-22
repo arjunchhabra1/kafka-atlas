@@ -27,7 +27,7 @@ from kgrag.questions.sample import (
 from kgrag.store.repo import Document, QuestionRow, get_documents, insert_question, log_failure
 from kgrag.tokens import count_tokens
 
-DRAFT_PROMPT_VERSION = "draft-v3"
+DRAFT_PROMPT_VERSION = "draft-v4"
 MULTI_HOP: tuple[QuestionType, ...] = ("inference", "comparison", "temporal")
 # Randomly sampled single-hop goes first so ID-linked relabels never displace it.
 DRAFT_ORDER: tuple[QuestionType, ...] = ("single_hop", *MULTI_HOP, "null")
@@ -118,14 +118,20 @@ TYPE_INSTRUCTIONS: dict[str, str] = {
         "viable=false if dates are the only dimension the documents share."
     ),
     "temporal": (
-        "The two documents are about one KIP or ticket at two points of its lifecycle (for "
-        "example the design discussion and a later reply or vote). Write ONE question asking "
-        "what changed, or why it changed, between the earlier point and the later one: how the "
-        "design evolved, a position or decision that was reversed, a concern raised and how it "
-        "was resolved. Name both points (for example 'between the KIP-1079 design discussion "
-        "and its vote'). The answer must need BOTH documents: the earlier one for the starting "
-        "point, the later one for the change. Never ask which came first, when something "
-        "happened or how long it took. Set viable=false if nothing changed in substance."
+        "The first document is the ORIGINAL proposal (or first message) about a KIP, ticket or "
+        "discussion; the second, later document announces a REVISION of it (the proposal was "
+        "updated, renamed, dropped or changed, often in response to feedback). Write ONE "
+        "question asking what changed in the proposal, or why it was changed, that can only "
+        "be answered by comparing the two: the original state comes from the first document, "
+        "the new state or the reason from the second (for example 'How did the KIP-1079 "
+        "proposal change its approach to X after the initial discussion?', answered 'from A "
+        "to B', or 'Why was X in KIP-1079 replaced after the first proposal?'). The answer should name "
+        "both the original and the revised state, or the change and its reason. Identify the "
+        "KIP, ticket or discussion, but do not quote the revision announcement. Never ask "
+        "which came first, when something happened or how long it took. Set viable=false if "
+        "the later document does not describe a real change to the proposal (only a "
+        "question, a vote, an alternative that was not adopted, or a typo fix), or if it "
+        "alone states both the old and the new state."
     ),
     "null": (
         "You are given only the topic of a discussion. Write a question that is plausible "

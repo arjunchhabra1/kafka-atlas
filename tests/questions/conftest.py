@@ -17,6 +17,14 @@ FILLER = (
     "that operators should perform before enabling the change in production clusters."
 )
 
+# A later revision announcement on KIP-100 that does not repost the original proposal.
+REVISION = (
+    "Update on kip 100 after review: I've updated the proposal based on the feedback. The "
+    "fencing epoch now lives in the metadata log rather than in ZooKeeper, and the admin "
+    "endpoint was renamed so clients can discover the active controller without polling "
+    "every node in the quorum. The broker protocol is otherwise unchanged."
+)
+
 
 def day(month: int, d: int) -> datetime:
     return datetime(2026, month, d, tzinfo=UTC)
@@ -25,7 +33,7 @@ def day(month: int, d: int) -> datetime:
 # (email id, thread, date, body). Bodies mention at most one ID except where noted.
 EMAILS = [
     ("e1", "t1", day(1, 1), f"Proposal for KIP-100. {FILLER}"),
-    ("e2", "t2", day(1, 20), f"Update on kip 100 after review. {FILLER}"),
+    ("e2", "t2", day(1, 20), REVISION),
     ("e3", "t3", day(2, 10), f"Vote result for KIP-100. {FILLER}"),
     ("e4", "t4", day(1, 5), f"Discussion of KIP-200 design. {FILLER}"),
     ("e5", "t5", day(1, 6), f"More on KIP-200 compatibility, which builds on KIP-100. {FILLER}"),

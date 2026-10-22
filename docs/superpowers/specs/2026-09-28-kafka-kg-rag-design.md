@@ -229,9 +229,9 @@ when the sources do not support an answer.
 | Type | Gold sources | Target count |
 |---|---|---|
 | Single-hop | 1 | ~100 |
-| Inference (bridge) | 2–3 | ~55 |
+| Inference (bridge) | 2–3 | ~80 |
 | Comparison | 2 | ~50 |
-| Temporal | 2–3 | ~55 |
+| Temporal | 2 | ~30 |
 | Null (unanswerable) | 0 | ~40 |
 
 Total ~300 reviewed questions.
