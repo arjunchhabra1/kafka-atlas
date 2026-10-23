@@ -1,0 +1,370 @@
+{
+  "clusters": [
+    {
+      "entity": "Andrew Schofield",
+      "type": "Person",
+      "mention_ids": [
+        "0d1bfd65083a1475:m3",
+        "11997d173331b1ee:m2",
+        "14e26cd0934e1d09:m2",
+        "182da09e3b823094:m2",
+        "191353396e99757e:m2",
+        "19c925e2b7c2b7b4:h0",
+        "19c925e2b7c2b7b4:m1",
+        "22b1a7f455942444:h0",
+        "22b1a7f455942444:m8",
+        "242b69f6b7633ac6:m2",
+        "2699a417f0566d85:m2",
+        "2ad9d7c8cdbf48e1:m2",
+        "2c24ed0bf877a2b8:m2",
+        "2d9c5c5efa057176:m2",
+        "2f2a70d3d73ecb04:h0",
+        "2f2a70d3d73ecb04:m1",
+        "3e3aaca1d9ee83b5:m3",
+        "59e59c14e8b73ada:m2",
+        "5c611bc8a42c8052:h0",
+        "5c611bc8a42c8052:m1",
+        "72f35b7d2d5e6143:h0",
+        "72f35b7d2d5e6143:m1",
+        "77436d1b80f59748:h0",
+        "77436d1b80f59748:m1",
+        "828298044c1f3a62:h0",
+        "828298044c1f3a62:m1",
+        "8634bfdb9e2a99db:h0",
+        "8634bfdb9e2a99db:m1",
+        "a7456702aed5c0ea:m2",
+        "adf235eea34d8d96:m2",
+        "bd0f1ebe0d6bd63f:h0",
+        "bd0f1ebe0d6bd63f:m1",
+        "c7ca682f1cef312c:m2",
+        "deeaa4d3257b3e71:h0",
+        "deeaa4d3257b3e71:m1",
+        "e50eadcb351263df:h0",
+        "e50eadcb351263df:m1",
+        "e85397c467efa9b6:m2",
+        "ed758065cdf05c10:h0",
+        "ed758065cdf05c10:m1",
+        "fc9d3babefa97270:h0",
+        "fc9d3babefa97270:m1",
+        "fe26b112c6f4e8d3:h0",
+        "fe26b112c6f4e8d3:m1",
+        "ff0234819dafdcbe:h0",
+        "ff0234819dafdcbe:m1",
+        "ff9c54ba13762a1b:h0",
+        "ff9c54ba13762a1b:m1",
+        "jira:3:a0",
+        "jira:6:a0",
+        "jira:7:a0"
+      ],
+      "tags": [],
+      "note": "Two personal addresses (andrew_schofield@live.com, andrew_schofield_jira@outlook.com; a quoted header also shows andrew_schofield_jira@live.com) plus the Jira display name; no @apache.org address in the slice, so not tagged multi_identity. 'Andrew' is unambiguous: he is the only Andrew in the slice."
+    },
+    {
+      "entity": "Apoorv Mittal",
+      "type": "Person",
+      "mention_ids": [
+        "0d1bfd65083a1475:h0",
+        "0d1bfd65083a1475:m1",
+        "191353396e99757e:h0",
+        "191353396e99757e:m1",
+        "22b1a7f455942444:m6",
+        "fc9d3babefa97270:m2"
+      ],
+      "tags": []
+    },
+    {
+      "entity": "Chia-Ping Tsai",
+      "type": "Person",
+      "mention_ids": [
+        "195743a8a69aa1c8:h0",
+        "195743a8a69aa1c8:m1",
+        "1a8cf3f2da0db1cd:h0",
+        "5ef32672eac6a474:m1",
+        "bd0f1ebe0d6bd63f:m2",
+        "c7ca682f1cef312c:h0",
+        "c7ca682f1cef312c:m1",
+        "jira:4:a0",
+        "jira:5:a0"
+      ],
+      "tags": [
+        "multi_identity"
+      ],
+      "note": "chia7712@gmail.com (KIP-1032 PR thread), chia7712@apache.org (KIP-1043 thread) and Jira display name 'Chia-Ping Tsai' (resolved KAFKA-16437 and KAFKA-16096). The only person active in both KIPs."
+    },
+    {
+      "entity": "Chris Egerton",
+      "type": "Person",
+      "mention_ids": [
+        "41671634bd35ba7c:m3",
+        "aecf9cf642e85c86:m3",
+        "b71209b858751344:h0",
+        "b71209b858751344:m1",
+        "bb1bf5908175eeb7:h0",
+        "bb1bf5908175eeb7:m1",
+        "c23d79493251dbdd:h0",
+        "c23d79493251dbdd:m1"
+      ],
+      "tags": [
+        "shared_first_name"
+      ],
+      "note": "Judgment call: shares the 'Chris' nickname with Christopher Shannon; only one bare 'Chris' mention is his (aecf9cf642e85c86:m3, Shannon replying to Egerton's nits). His fearthecellos@gmail.com / cegerton@apache.org addresses do not occur in the slice."
+    },
+    {
+      "entity": "Christopher Shannon",
+      "type": "Person",
+      "mention_ids": [
+        "195743a8a69aa1c8:m2",
+        "2633bee2ddc7f195:h0",
+        "2633bee2ddc7f195:m1",
+        "41671634bd35ba7c:h0",
+        "41671634bd35ba7c:m1",
+        "48d54cb168185c71:h0",
+        "48d54cb168185c71:m1",
+        "49292277b2765e0b:h0",
+        "49292277b2765e0b:m1",
+        "5a7b8d853f8c7fff:h0",
+        "5a7b8d853f8c7fff:m1",
+        "5ef32672eac6a474:h0",
+        "65b7db12b3677758:m2",
+        "67a890b19af62680:m2",
+        "6ac475da22447dfb:m2",
+        "9648a03b2eea9455:m2",
+        "a6d626b7a15c10e8:h0",
+        "aecf9cf642e85c86:h0",
+        "aecf9cf642e85c86:m1",
+        "aee3f5c1f49a24c6:h0",
+        "aee3f5c1f49a24c6:m1",
+        "becd0adee054a281:h0",
+        "becd0adee054a281:m1",
+        "d11d11fcd3e65b9d:h0",
+        "d11d11fcd3e65b9d:m3",
+        "e4b9120faae190ef:h0",
+        "e4b9120faae190ef:m1",
+        "fa2ab057209a27df:h0",
+        "fa2ab057209a27df:m1",
+        "jira:2:a0"
+      ],
+      "tags": [
+        "shared_first_name"
+      ],
+      "note": "Judgment call: signs his mails 'Chris', as does Chris Egerton (who signs 'Other Chris' in this thread). Each bare 'Chris' was resolved by who the mail replies to. Jira display name is 'Christopher L. Shannon'."
+    },
+    {
+      "entity": "David Arthur",
+      "type": "Person",
+      "mention_ids": [
+        "22b1a7f455942444:m5",
+        "6211d0ab58164b85:h0",
+        "6211d0ab58164b85:m1"
+      ],
+      "tags": [
+        "shared_first_name"
+      ],
+      "note": "Shares 'David' with David Jacot; appears only as header (mumrah@gmail.com), his 'David A' sign-off and the vote tally."
+    },
+    {
+      "entity": "David Jacot",
+      "type": "Person",
+      "mention_ids": [
+        "182da09e3b823094:h0",
+        "182da09e3b823094:m1",
+        "22b1a7f455942444:m2",
+        "2699a417f0566d85:h0",
+        "2699a417f0566d85:m1",
+        "2ad9d7c8cdbf48e1:h0",
+        "2ad9d7c8cdbf48e1:m1",
+        "2f2a70d3d73ecb04:m2",
+        "2f2a70d3d73ecb04:m4",
+        "511c74de22f27827:h0",
+        "511c74de22f27827:m1",
+        "77436d1b80f59748:m2",
+        "a7456702aed5c0ea:h0",
+        "a7456702aed5c0ea:m1",
+        "adf235eea34d8d96:h0",
+        "adf235eea34d8d96:m1",
+        "deeaa4d3257b3e71:m2",
+        "fe26b112c6f4e8d3:m2"
+      ],
+      "tags": [
+        "shared_first_name"
+      ],
+      "note": "Judgment call for the four bare 'Hi David' mentions: all are Andrew Schofield replies to David Jacot's DJn review points in the DISCUSS thread (David Arthur only posted a +1 in the VOTE thread)."
+    },
+    {
+      "entity": "Greg Harris",
+      "type": "Person",
+      "mention_ids": [
+        "41671634bd35ba7c:m5",
+        "48d54cb168185c71:m5",
+        "5a7b8d853f8c7fff:m2",
+        "5fe57421379d9c0b:h0",
+        "5fe57421379d9c0b:m1",
+        "65b7db12b3677758:h0",
+        "65b7db12b3677758:m1",
+        "6ac475da22447dfb:h0",
+        "6ac475da22447dfb:m1",
+        "84309744833af5cc:h0",
+        "84309744833af5cc:m1",
+        "9648a03b2eea9455:h0",
+        "9648a03b2eea9455:m1",
+        "bb1bf5908175eeb7:m3",
+        "e4b9120faae190ef:m2"
+      ],
+      "tags": []
+    },
+    {
+      "entity": "Ismael Juma",
+      "type": "Person",
+      "mention_ids": [
+        "jira:1:a0"
+      ],
+      "tags": []
+    },
+    {
+      "entity": "Kirk True",
+      "type": "Person",
+      "mention_ids": [
+        "14e26cd0934e1d09:h0",
+        "14e26cd0934e1d09:m1",
+        "72f35b7d2d5e6143:m2"
+      ],
+      "tags": []
+    },
+    {
+      "entity": "Lianet Magrans",
+      "type": "Person",
+      "mention_ids": [
+        "11997d173331b1ee:h0",
+        "11997d173331b1ee:m1",
+        "19c925e2b7c2b7b4:m2",
+        "22b1a7f455942444:m3",
+        "2c24ed0bf877a2b8:h0",
+        "2c24ed0bf877a2b8:m1",
+        "2d9c5c5efa057176:h0",
+        "2d9c5c5efa057176:m1",
+        "3e3aaca1d9ee83b5:h0",
+        "3e3aaca1d9ee83b5:m1",
+        "59e59c14e8b73ada:h0",
+        "59e59c14e8b73ada:m1",
+        "5c611bc8a42c8052:m3",
+        "8634bfdb9e2a99db:m2",
+        "e50eadcb351263df:m2",
+        "ed758065cdf05c10:m2"
+      ],
+      "tags": [],
+      "note": "Header name is abbreviated 'Lianet M.'; the full surname appears only in Andrew's vote tally."
+    },
+    {
+      "entity": "Lucas Brutschy",
+      "type": "Person",
+      "mention_ids": [
+        "22b1a7f455942444:m4",
+        "242b69f6b7633ac6:h0",
+        "242b69f6b7633ac6:m1",
+        "2c24ed0bf877a2b8:m4",
+        "8634bfdb9e2a99db:m4",
+        "e85397c467efa9b6:h0",
+        "e85397c467efa9b6:m1",
+        "ff0234819dafdcbe:m2"
+      ],
+      "tags": []
+    },
+    {
+      "entity": "Mickael Maison",
+      "type": "Person",
+      "mention_ids": [
+        "41671634bd35ba7c:m4",
+        "67a890b19af62680:h0",
+        "67a890b19af62680:m1"
+      ],
+      "tags": []
+    },
+    {
+      "entity": "AsyncKafkaConsumer",
+      "type": "Component",
+      "mention_ids": [
+        "fc9d3babefa97270:m5"
+      ],
+      "tags": [],
+      "note": "Judgment call: kept separate from LegacyKafkaConsumer and from 'the consumer' in general; they are two different consumer implementations."
+    },
+    {
+      "entity": "ConnectRestExtension",
+      "type": "Component",
+      "mention_ids": [
+        "6ac475da22447dfb:m4"
+      ],
+      "tags": [],
+      "note": "Judgment call: kept separate from ConnectRestExtensionContext; they are distinct interfaces in connect-api."
+    },
+    {
+      "entity": "ConnectRestExtensionContext",
+      "type": "Component",
+      "mention_ids": [
+        "bb1bf5908175eeb7:m4",
+        "d11d11fcd3e65b9d:m2"
+      ],
+      "tags": [],
+      "note": "Judgment call: kept separate from ConnectRestExtension (see that cluster)."
+    },
+    {
+      "entity": "DescribeGroups API",
+      "type": "Component",
+      "mention_ids": [
+        "adf235eea34d8d96:m4"
+      ],
+      "tags": []
+    },
+    {
+      "entity": "GroupMetadataManager",
+      "type": "Component",
+      "mention_ids": [
+        "191353396e99757e:m5"
+      ],
+      "tags": []
+    },
+    {
+      "entity": "Jetty",
+      "type": "Component",
+      "mention_ids": [
+        "1a8cf3f2da0db1cd:m2",
+        "48d54cb168185c71:m3",
+        "aee3f5c1f49a24c6:m4"
+      ],
+      "tags": [],
+      "note": "Judgment call: 'Jetty 12' (a major version) grouped with 'Jetty' as the same component."
+    },
+    {
+      "entity": "Kafka Connect",
+      "type": "Component",
+      "mention_ids": [
+        "84309744833af5cc:m3",
+        "9648a03b2eea9455:m4",
+        "b71209b858751344:m4",
+        "becd0adee054a281:m3",
+        "e4b9120faae190ef:m5"
+      ],
+      "tags": []
+    },
+    {
+      "entity": "LegacyKafkaConsumer",
+      "type": "Component",
+      "mention_ids": [
+        "fc9d3babefa97270:m6"
+      ],
+      "tags": []
+    },
+    {
+      "entity": "MirrorMaker 2",
+      "type": "Component",
+      "mention_ids": [
+        "84309744833af5cc:m4",
+        "9648a03b2eea9455:m5"
+      ],
+      "tags": [
+        "variant_spellings"
+      ],
+      "note": "'MirrorMaker 2' vs 'MirrorMaker2'. Closest available variant case: no component in this slice is written 3 ways by the extractor."
+    }
+  ]
+}

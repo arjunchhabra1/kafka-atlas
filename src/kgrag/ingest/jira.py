@@ -1,0 +1,101 @@
+"""Parse automated Jira notification emails into structured events.
+
+Observed subject form on dev@: ``[jira] [Action] (KAFKA-N) Title``. Only Created, Resolved
+and Reopened actually reach the list; the other actions are handled for completeness.
+"""
+
+import re
+from datetime import datetime
+from typing import Literal
+
+from pydantic import BaseModel
+
+from kgrag.ingest.parse import RawEmail
+
+Action = Literal["created", "assigned", "resolved", "commented", "updated", "reopened", "closed"]
+
+_ACTIONS: dict[str, Action] = {
+    a: a for a in ("created", "assigned", "resolved", "commented", "updated", "reopened", "closed")
+}
+_SUBJECT = re.compile(r"^\s*\[jira\]\s*\[([^\]]+)\]\s*\((KAFKA-\d+)\)\s*(.*)$", re.IGNORECASE)
+_SENDER_SUFFIX = re.compile(r"\s*\(jira\)\s*$", re.IGNORECASE)
+_RESOLUTION = re.compile(r"^[ \t]*Resolution:[ \t]*(.+?)[ \t]*$", re.MULTILINE)
+_FIX_VERSION = re.compile(r"^[ \t]*Fix Version/s:[ \t]*(.+?)[ \t]*$", re.MULTILINE)
+
+
+_FIELD_ACTIONS = {"resolved", "closed", "reopened"}
+
+_FIX_FOR = re.compile(r"^>[ \t]+Fix For:[ \t]*(.+?)[ \t]*$", re.MULTILINE)
+
+
+class JiraEvent(BaseModel):
+    ticket: str
+    action: Action
+    actor: str
+    date: datetime
+    status: str | None
+    fix_version: str | None
+    source_email_id: str
+    title: str
+
+
+def _field_block(body: str) -> str:
+    """Jira's field lines: those under the first '-----' underline, up to the next blank line."""
+    lines = body.splitlines()
+    for i, line in enumerate(lines):
+        if re.fullmatch(r"-{5,}\s*", line):
+            block = []
+            for nxt in lines[i + 1 :]:
+                if not nxt.strip():
+                    break
+                block.append(nxt)
+            return "\n".join(block)
+    return ""
+
+
+def _summary_fields(body: str) -> str:
+    """Header-style fields of the quoted issue summary: '>' lines up to the first bare '>' line."""
+    block = []
+    started = False
+    for line in body.splitlines():
+        if line.startswith(">"):
+            if not line.strip(">").strip() and started and any("Key:" in b for b in block):
+                break
+            started = True
+            block.append(line)
+        elif started:
+            break
+    return "\n".join(block)
+
+
+def parse_jira_notification(email: RawEmail, email_id: str) -> JiraEvent | None:
+    m = _SUBJECT.match(email.subject)
+    if not m:
+        return None
+    action = _ACTIONS.get(m.group(1).strip().lower())
+    if action is None:
+        return None
+    status = fix = None
+    if action in _FIELD_ACTIONS:
+        block = _field_block(email.body)
+        status = _RESOLUTION.search(block)
+        fix = _FIX_VERSION.search(block) or _FIX_FOR.search(_summary_fields(email.body))
+    return JiraEvent(
+        ticket=m.group(2),
+        action=action,
+        actor=_SENDER_SUFFIX.sub("", email.sender_name).strip(),
+        date=email.date,
+        status=status.group(1) if status else None,
+        fix_version=fix.group(1).split(",")[0].strip() if fix else None,
+        source_email_id=email_id,
+        title=m.group(3).strip(),
+    )
+
+
+def render_event(e: JiraEvent) -> str:
+    text = f"{e.actor} {e.action} {e.ticket} ({e.title})"
+    if e.status:
+        text += f" as {e.status}"
+    if e.fix_version:
+        text += f" in {e.fix_version}"
+    return f"{text} on {e.date.date().isoformat()}."

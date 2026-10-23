@@ -1,0 +1,74 @@
+Return-Path: 
+ <dev-return-102972-archive-asf-public=cust-asf.ponee.io@kafka.apache.org>
+X-Original-To: archive-asf-public@cust-asf.ponee.io
+Delivered-To: archive-asf-public@cust-asf.ponee.io
+Received: from mail.apache.org (hermes.apache.org [140.211.11.3])
+	by mx-eu-01.ponee.io (Postfix) with SMTP id 230BB18064C
+	for <archive-asf-public@cust-asf.ponee.io>;
+ Thu,  4 Apr 2019 18:36:06 +0200 (CEST)
+Received: (qmail 86719 invoked by uid 500); 4 Apr 2019 16:36:01 -0000
+Mailing-List: contact dev-help@kafka.apache.org; run by ezmlm
+Precedence: bulk
+List-Help: <mailto:dev-help@kafka.apache.org>
+List-Unsubscribe: <mailto:dev-unsubscribe@kafka.apache.org>
+List-Post: <mailto:dev@kafka.apache.org>
+List-Id: <dev.kafka.apache.org>
+Reply-To: dev@kafka.apache.org
+Delivered-To: mailing list dev@kafka.apache.org
+Received: (qmail 86671 invoked by uid 99); 4 Apr 2019 16:36:00 -0000
+Received: from mailrelay1-us-west.apache.org (HELO
+ mailrelay1-us-west.apache.org) (209.188.14.139)
+    by apache.org (qpsmtpd/0.29) with ESMTP; Thu, 04 Apr 2019 16:36:00 +0000
+Received: from jira-lw-us.apache.org (unknown [207.244.88.139])
+	by mailrelay1-us-west.apache.org (ASF Mail Server at
+ mailrelay1-us-west.apache.org) with ESMTP id 82B32E2603
+	for <dev@kafka.apache.org>; Thu,  4 Apr 2019 16:36:00 +0000 (UTC)
+Received: from jira-lw-us.apache.org (localhost [127.0.0.1])
+	by jira-lw-us.apache.org (ASF Mail Server at jira-lw-us.apache.org) with
+ ESMTP id 2E7F324599
+	for <dev@kafka.apache.org>; Thu,  4 Apr 2019 16:36:00 +0000 (UTC)
+Date: Thu, 4 Apr 2019 16:36:00 +0000 (UTC)
+From: "Manikumar (JIRA)" <jira@apache.org>
+To: dev@kafka.apache.org
+Message-ID: <JIRA.13220803.1552300260000.7797.1554395760187@Atlassian.JIRA>
+In-Reply-To: <JIRA.13220803.1552300260000@Atlassian.JIRA>
+References: <JIRA.13220803.1552300260000@Atlassian.JIRA>
+ <JIRA.13220803.1552300260641@jira-lw-us.apache.org>
+Subject: [jira] [Resolved] (KAFKA-8090) Replace ControlledShutdown
+ request/response with automated protocol
+MIME-Version: 1.0
+Content-Type: text/plain; charset=utf-8
+Content-Transfer-Encoding: 7bit
+X-JIRA-FingerPrint: 30527f35849b9dde25b450d4833f0394
+
+
+     [ https://issues.apache.org/jira/browse/KAFKA-8090?page=com.atlassian.jira.plugin.system.issuetabpanels:all-tabpanel ]
+
+Manikumar resolved KAFKA-8090.
+------------------------------
+       Resolution: Fixed
+    Fix Version/s: 2.3.0
+
+Issue resolved by pull request 6423
+[https://github.com/apache/kafka/pull/6423]
+
+> Replace ControlledShutdown request/response with automated protocol
+> -------------------------------------------------------------------
+>
+>                 Key: KAFKA-8090
+>                 URL: https://issues.apache.org/jira/browse/KAFKA-8090
+>             Project: Kafka
+>          Issue Type: Sub-task
+>            Reporter: Mickael Maison
+>            Assignee: Mickael Maison
+>            Priority: Major
+>             Fix For: 2.3.0
+>
+>
+
+
+
+
+--
+This message was sent by Atlassian JIRA
+(v7.6.3#76005)

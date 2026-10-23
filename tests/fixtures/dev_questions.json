@@ -1,0 +1,72 @@
+[
+  {
+    "id": "dev-01",
+    "type": "single_hop",
+    "question": "After Andrew Schofield simplified KIP-1043 in September 2024, which new command-line tool did the KIP add?",
+    "answer": "kafka-groups.sh (plus better error handling when describing a group of the wrong type).",
+    "gold_doc_ids": ["email:5c611bc8a42c8052:0"]
+  },
+  {
+    "id": "dev-02",
+    "type": "single_hop",
+    "question": "Which open-source project did Greg Harris find with at least six ConnectRestExtension implementations when reviewing KIP-1032?",
+    "answer": "The Debezium project.",
+    "gold_doc_ids": ["email:6ac475da22447dfb:0"]
+  },
+  {
+    "id": "dev-03",
+    "type": "single_hop",
+    "question": "Who created the Jira ticket KAFKA-16891 for KIP-1043?",
+    "answer": "Andrew Schofield, on 2024-06-04.",
+    "gold_doc_ids": ["jira:3"]
+  },
+  {
+    "id": "dev-04",
+    "type": "single_hop",
+    "question": "When Christopher Shannon agreed to open the KIP-1032 vote, which JDK, JavaEE and Jetty versions did he say the KIP should target?",
+    "answer": "JDK 17, JavaEE 10 and Jetty 12, because Jetty 11 is end-of-life.",
+    "gold_doc_ids": ["email:5a7b8d853f8c7fff:0"]
+  },
+  {
+    "id": "dev-05",
+    "type": "inference",
+    "question": "Which person took part in both the KIP-1032 and the KIP-1043 discussions, and what did they raise in each?",
+    "answer": "Chia-Ping Tsai. On KIP-1032 he said KAFKA-16096 should be resolved before reviewing the PR; on KIP-1043 he suggested adding pattern filters for group IDs, inspired by KIP-1152.",
+    "gold_doc_ids": ["email:195743a8a69aa1c8:0", "email:c7ca682f1cef312c:0"]
+  },
+  {
+    "id": "dev-06",
+    "type": "inference",
+    "question": "Did KIP-1043's final error-handling design match David Jacot's preference, and how did he vote?",
+    "answer": "Yes. He preferred GROUP_ID_NOT_FOUND with an error message over a new INCONSISTENT_GROUP_TYPE code, Andrew updated the KIP to that, and David voted +1 (binding).",
+    "gold_doc_ids": ["email:deeaa4d3257b3e71:0", "email:511c74de22f27827:0"]
+  },
+  {
+    "id": "dev-07",
+    "type": "comparison",
+    "question": "Which KIP received more binding votes, KIP-1032 or KIP-1043?",
+    "answer": "KIP-1043, with 4 binding votes (David Jacot, Lianet Magrans, Lucas Brutschy, David Arthur) against KIP-1032's 3 (Chris Egerton, Mickael Maison, Greg Harris).",
+    "gold_doc_ids": ["email:41671634bd35ba7c:0", "email:22b1a7f455942444:0"]
+  },
+  {
+    "id": "dev-08",
+    "type": "comparison",
+    "question": "How do the resolutions of the Jira tickets for KIP-1032 and KIP-1043 compare (who resolved them and with which fix version)?",
+    "answer": "KAFKA-16437 (KIP-1032) was resolved as Fixed in 4.0.0 by Chia-Ping Tsai on 2024-12-11; KAFKA-16891 (KIP-1043) was resolved as Fixed by Andrew Schofield on 2025-12-04 with no fix version recorded.",
+    "gold_doc_ids": ["jira:4", "jira:7"]
+  },
+  {
+    "id": "dev-09",
+    "type": "temporal",
+    "question": "How long after the KIP-1043 discussion thread started was its vote called?",
+    "answer": "About three and a half months: the discussion opened on 2024-06-04 and the vote was called on 2024-09-23.",
+    "gold_doc_ids": ["email:ff9c54ba13762a1b:0", "email:828298044c1f3a62:0"]
+  },
+  {
+    "id": "dev-10",
+    "type": "null",
+    "question": "How many lines of code did Christopher Shannon's KIP-1032 pull request change?",
+    "answer": "The mailing list does not contain this information.",
+    "gold_doc_ids": []
+  }
+]

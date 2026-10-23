@@ -1,0 +1,21 @@
+pg_dsn: postgresql://kgrag:kgrag@localhost:5432/kgrag
+neo4j_uri: bolt://localhost:7687
+neo4j_user: neo4j
+neo4j_password: devpassword
+models:
+  extract: claude-sonnet-5-5
+  draft: claude-sonnet-5-5
+  answer: claude-sonnet-5-5
+  judge: claude-opus-5-5
+  embed: voyage-4
+budget_tokens: 4000
+chunk_tokens: 500
+cost_guard_usd: 5.00
+prompt_versions: {}
+# USD per million tokens, as listed 2026-10.
+pricing:
+  claude-sonnet-5-5: {input: 2.00, output: 10.00}
+  claude-opus-5-5: {input: 4.00, output: 20.00}
+  claude-haiku-5-5: {input: 0.10, output: 0.50}
+batch_discount: 0.5  # Message Batches API price multiplier
+data_dir: data

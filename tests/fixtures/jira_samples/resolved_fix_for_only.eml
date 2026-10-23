@@ -1,0 +1,86 @@
+Return-Path: 
+ <dev-return-102952-archive-asf-public=cust-asf.ponee.io@kafka.apache.org>
+X-Original-To: archive-asf-public@cust-asf.ponee.io
+Delivered-To: archive-asf-public@cust-asf.ponee.io
+Received: from mail.apache.org (hermes.apache.org [140.211.11.3])
+	by mx-eu-01.ponee.io (Postfix) with SMTP id 90511180600
+	for <archive-asf-public@cust-asf.ponee.io>;
+ Wed,  3 Apr 2019 22:24:08 +0200 (CEST)
+Received: (qmail 10198 invoked by uid 500); 3 Apr 2019 20:24:02 -0000
+Mailing-List: contact dev-help@kafka.apache.org; run by ezmlm
+Precedence: bulk
+List-Help: <mailto:dev-help@kafka.apache.org>
+List-Unsubscribe: <mailto:dev-unsubscribe@kafka.apache.org>
+List-Post: <mailto:dev@kafka.apache.org>
+List-Id: <dev.kafka.apache.org>
+Reply-To: dev@kafka.apache.org
+Delivered-To: mailing list dev@kafka.apache.org
+Received: (qmail 9771 invoked by uid 99); 3 Apr 2019 20:24:02 -0000
+Received: from mailrelay1-us-west.apache.org (HELO
+ mailrelay1-us-west.apache.org) (209.188.14.139)
+    by apache.org (qpsmtpd/0.29) with ESMTP; Wed, 03 Apr 2019 20:24:02 +0000
+Received: from jira-lw-us.apache.org (unknown [207.244.88.139])
+	by mailrelay1-us-west.apache.org (ASF Mail Server at
+ mailrelay1-us-west.apache.org) with ESMTP id 3BBB8E2A18
+	for <dev@kafka.apache.org>; Wed,  3 Apr 2019 20:24:02 +0000 (UTC)
+Received: from jira-lw-us.apache.org (localhost [127.0.0.1])
+	by jira-lw-us.apache.org (ASF Mail Server at jira-lw-us.apache.org) with
+ ESMTP id DAFB92459E
+	for <dev@kafka.apache.org>; Wed,  3 Apr 2019 20:24:01 +0000 (UTC)
+Date: Wed, 3 Apr 2019 20:24:01 +0000 (UTC)
+From: "Randall Hauch (JIRA)" <jira@apache.org>
+To: dev@kafka.apache.org
+Message-ID: <JIRA.13222479.1552969438000.1148.1554323041894@Atlassian.JIRA>
+In-Reply-To: <JIRA.13222479.1552969438000@Atlassian.JIRA>
+References: <JIRA.13222479.1552969438000@Atlassian.JIRA>
+ <JIRA.13222479.1552969438951@jira-lw-us.apache.org>
+Subject: [jira] [Resolved] (KAFKA-8126) Flaky Test
+ org.apache.kafka.connect.runtime.WorkerTest.testAddRemoveTask
+MIME-Version: 1.0
+Content-Type: text/plain; charset=utf-8
+Content-Transfer-Encoding: 7bit
+X-JIRA-FingerPrint: 30527f35849b9dde25b450d4833f0394
+
+
+     [ https://issues.apache.org/jira/browse/KAFKA-8126?page=com.atlassian.jira.plugin.system.issuetabpanels:all-tabpanel ]
+
+Randall Hauch resolved KAFKA-8126.
+----------------------------------
+    Resolution: Fixed
+
+> Flaky Test org.apache.kafka.connect.runtime.WorkerTest.testAddRemoveTask
+> ------------------------------------------------------------------------
+>
+>                 Key: KAFKA-8126
+>                 URL: https://issues.apache.org/jira/browse/KAFKA-8126
+>             Project: Kafka
+>          Issue Type: Improvement
+>          Components: KafkaConnect, unit tests
+>            Reporter: Guozhang Wang
+>            Priority: Major
+>             Fix For: 2.0.2, 2.3.0, 2.1.2, 2.2.1
+>
+>
+> {code}
+> Stacktrace
+> java.lang.AssertionError: 
+>   Expectation failure on verify:
+>     WorkerSourceTask.run(): expected: 1, actual: 0
+> 	at org.easymock.internal.MocksControl.verify(MocksControl.java:242)
+> 	at org.powermock.api.easymock.internal.invocationcontrol.EasyMockMethodInvocationControl.verify(EasyMockMethodInvocationControl.java:126)
+> 	at org.powermock.api.easymock.PowerMock.verify(PowerMock.java:1476)
+> 	at org.powermock.api.easymock.PowerMock.verifyAll(PowerMock.java:1415)
+> 	at org.apache.kafka.connect.runtime.WorkerTest.testAddRemoveTask(WorkerTest.java:589)
+> 	at java.base/jdk.internal.reflect.NativeMethodAccessorImpl.invoke0(Native Method)
+> 	at java.base/jdk.internal.reflect.NativeMethodAccessorImpl.invoke(NativeMethodAccessorImpl.java:62)
+> 	at java.base/jdk.internal.reflect.DelegatingMethodAccessorImpl.invoke(DelegatingMethodAccessorImpl.java:43)
+> 	at java.base/java.lang.reflect.Method.invoke(Method.java:566)
+> 	at org.junit.internal.runners.TestMethod.invoke(TestMethod.java:68)
+> {code}
+> https://builds.apache.org/job/kafka-pr-jdk11-scala2.12/3330/testReport/junit/org.apache.kafka.connect.runtime/WorkerTest/testAddRemoveTask/
+
+
+
+--
+This message was sent by Atlassian JIRA
+(v7.6.3#76005)

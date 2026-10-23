@@ -1,0 +1,84 @@
+Return-Path: 
+ <dev-return-102925-archive-asf-public=cust-asf.ponee.io@kafka.apache.org>
+X-Original-To: archive-asf-public@cust-asf.ponee.io
+Delivered-To: archive-asf-public@cust-asf.ponee.io
+Received: from mail.apache.org (hermes.apache.org [140.211.11.3])
+	by mx-eu-01.ponee.io (Postfix) with SMTP id 0734E180672
+	for <archive-asf-public@cust-asf.ponee.io>;
+ Tue,  2 Apr 2019 08:52:03 +0200 (CEST)
+Received: (qmail 35445 invoked by uid 500); 2 Apr 2019 06:52:02 -0000
+Mailing-List: contact dev-help@kafka.apache.org; run by ezmlm
+Precedence: bulk
+List-Help: <mailto:dev-help@kafka.apache.org>
+List-Unsubscribe: <mailto:dev-unsubscribe@kafka.apache.org>
+List-Post: <mailto:dev@kafka.apache.org>
+List-Id: <dev.kafka.apache.org>
+Reply-To: dev@kafka.apache.org
+Delivered-To: mailing list dev@kafka.apache.org
+Received: (qmail 35398 invoked by uid 99); 2 Apr 2019 06:52:02 -0000
+Received: from mailrelay1-us-west.apache.org (HELO
+ mailrelay1-us-west.apache.org) (209.188.14.139)
+    by apache.org (qpsmtpd/0.29) with ESMTP; Tue, 02 Apr 2019 06:52:02 +0000
+Received: from jira-lw-us.apache.org (unknown [207.244.88.139])
+	by mailrelay1-us-west.apache.org (ASF Mail Server at
+ mailrelay1-us-west.apache.org) with ESMTP id 0E9DAE008D
+	for <dev@kafka.apache.org>; Tue,  2 Apr 2019 06:52:02 +0000 (UTC)
+Received: from jira-lw-us.apache.org (localhost [127.0.0.1])
+	by jira-lw-us.apache.org (ASF Mail Server at jira-lw-us.apache.org) with
+ ESMTP id C5A5524597
+	for <dev@kafka.apache.org>; Tue,  2 Apr 2019 06:52:01 +0000 (UTC)
+Date: Tue, 2 Apr 2019 06:52:01 +0000 (UTC)
+From: "Braedon Vickers (JIRA)" <jira@apache.org>
+To: dev@kafka.apache.org
+Message-ID: <JIRA.13032391.1483651461000.170237.1554187921806@Atlassian.JIRA>
+In-Reply-To: <JIRA.13032391.1483651461000@Atlassian.JIRA>
+References: <JIRA.13032391.1483651461000@Atlassian.JIRA>
+ <JIRA.13032391.1483651461862@jira-lw-us.apache.org>
+Subject: [jira] [Reopened] (KAFKA-4600) Consumer proceeds on when
+ ConsumerRebalanceListener fails
+MIME-Version: 1.0
+Content-Type: text/plain; charset=utf-8
+Content-Transfer-Encoding: 7bit
+X-JIRA-FingerPrint: 30527f35849b9dde25b450d4833f0394
+
+
+     [ https://issues.apache.org/jira/browse/KAFKA-4600?page=com.atlassian.jira.plugin.system.issuetabpanels:all-tabpanel ]
+
+Braedon Vickers reopened KAFKA-4600:
+------------------------------------
+
+Hi [~guozhang],
+
+I'm going to reopen this, as the issue I raised hasn't been addressed.
+
+[~dana.powers] is correct - this issue is around exceptions thrown by the `ConsumerRebalanceListener` implementation itself, _not_ about failures in `SyncGroup`.
+
+https://issues.apache.org/jira/browse/KAFKA-5154 is unrelated, and the [PR you referenced|https://github.com/apache/kafka/pull/3181] does not fix this issue.
+
+As you can see from the code snipped posted above, the client still catches and squashes any exception (other than `WakeupException` and `InterruptException`) raised by `ConsumerRebalanceListener.onPartitionsAssigned()`, causing the issue described in this ticket.
+
+Regards,
+Braedon
+
+> Consumer proceeds on when ConsumerRebalanceListener fails
+> ---------------------------------------------------------
+>
+>                 Key: KAFKA-4600
+>                 URL: https://issues.apache.org/jira/browse/KAFKA-4600
+>             Project: Kafka
+>          Issue Type: Bug
+>          Components: consumer
+>    Affects Versions: 0.10.1.1
+>            Reporter: Braedon Vickers
+>            Priority: Major
+>             Fix For: 0.11.0.0
+>
+>
+> One of the use cases for a ConsumerRebalanceListener is to load state necessary for processing a partition when it is assigned. However, when ConsumerRebalanceListener.onPartitionsAssigned() fails for some reason (i.e. the state isn't loaded), the error is logged and the consumer proceeds on as if nothing happened, happily consuming messages from the new partition. When the state is relied upon for correct processing, this can be very bad, e.g. data loss can occur.
+> It would be better if the error was propagated up so it could be dealt with normally. At the very least the assignment should fail so the consumer doesn't see any messages from the new partitions, and the rebalance can be reattempted.
+
+
+
+--
+This message was sent by Atlassian JIRA
+(v7.6.3#76005)

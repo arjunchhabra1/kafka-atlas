@@ -19,7 +19,7 @@
 - One `VoyageAIEmbeddings` instance is shared by baseline indexing/queries and `KnowledgeGraph` vector search.
 - Retrieval `budget_tokens` default `4000`; email chunk size `500` tokens. All token counts use `kgrag.tokens.count_tokens` (tiktoken `cl100k_base`) — the one counter for every budget and chunk decision.
 - Both retrievers return `RetrievalResult` over the same `documents` table; both systems use the same answer chain.
-- Question set: ~300 reviewed (single-hop ~100, inference ~55, comparison ~50, temporal ~55, null ~40); split 20% dev / 80% test, stratified by type, fixed seed.
+- Question set: ~300 reviewed (single-hop ~100, inference ~80, comparison ~50, temporal ~30, null ~40); split 20% dev / 80% test, stratified by type, fixed seed.
 - Evidence sampling for questions uses only header/thread and regex-ID links — never Neo4j.
 - ER quality target: B³ F1 ≥ `0.85` on `tests/fixtures/gold_entities.json`.
 - Every results file records model IDs, prompt versions and config hash. Headline numbers come only from the test-split run.
@@ -387,7 +387,7 @@ tests/fixtures/  dev_slice.mbox  jira_samples/  recorded_extractions.json
   - `DRAFT_PROMPT_VERSION = "draft-v1"`; `draft_question(es: EvidenceSet, docs: list[Document], llm) -> DraftQuestion(question, answer, type, gold_doc_ids)`.
   - `answerable_from_single_source(draft: DraftQuestion, docs, llm) -> bool` — asks the model per individual gold doc; multi-hop drafts answerable from any one doc are relabeled `single_hop` (gold = that doc) or dropped if single-hop quota is full.
   - `null_question_absent(draft, conn) -> bool` — keyword search (Postgres full-text over `documents.text`) for the draft's key terms finds no doc stating the answer; drafts failing this are dropped.
-  - CLI: `kgrag questions draft --pilot` (30 drafts, 6 per type) and `kgrag questions draft --counts single_hop=100,inference=55,comparison=50,temporal=55,null=40 [--yes]` (drafts ~1.3× each count to absorb review drops; cost guard applies).
+  - CLI: `kgrag questions draft --pilot` (30 drafts, 6 per type) and `kgrag questions draft --counts single_hop=100,inference=80,comparison=50,temporal=30,null=40 [--yes]` (drafts ~1.3× each count to absorb review drops; cost guard applies).
 - [ ] **Step 1: Write failing tests:** `test_sampler_does_not_use_graph` (assert `kgrag.graph` not in `sys.modules` after importing and running `sample_evidence_sets` in a subprocess); `test_sampler_deterministic_by_seed`; `test_inference_sets_share_id_across_threads`; `test_comparison_sets_two_distinct_ids`; `test_single_source_filter_relabels` (fake llm answers from doc A alone → draft becomes `single_hop`); `test_null_keyword_check`.
 - [ ] **Step 2: Run** — FAIL. **Step 3: Implement.** **Step 4: Run** — PASS.
 - [ ] **Step 5: Pilot.** `uv run kgrag questions draft --pilot`, then 👤 USER reviews the 30 via Task 18's CLI (if Task 18 isn't done yet, do it first and return here). Revise the draft prompt from what was dropped/edited (bump `DRAFT_PROMPT_VERSION`).
