@@ -6,109 +6,114 @@ An engineering knowledge assistant over the Apache Kafka developer mailing list.
 
 The corpus is three years (2023–2025) of `dev@kafka.apache.org` plus its Jira activity: a public stand-in for the Slack, email and ticket history that companies index internally. Two systems answer the same questions with the same model, prompt and context budget, so retrieval is the only thing that differs:
 
-- **Vector RAG baseline:** LangChain + pgvector, nearest-neighbour search over email and Jira chunks.
-- **Graph RAG:** an LLM-extracted knowledge graph in Neo4j, queried through entity linking and multi-hop traversal, with every edge pointing back to the chunks that justify it.
+- **Vector RAG baseline:** LangChain + pgvector nearest-neighbour search over email and Jira chunks
+- **Graph RAG:** an LLM-extracted knowledge graph in Neo4j, queried through entity linking and multi-hop traversal
 
-**Stack:** Python 3.12 · Claude Sonnet 5.5 (extraction, question drafting, answering) and Claude Opus 5.5 (judge) · Voyage embeddings · Postgres + pgvector · Neo4j · LangChain · FastAPI · Docker · GitHub Actions
+**Stack:** Python 3.12 · Claude Sonnet 5.5 · Voyage embeddings · Postgres + pgvector · Neo4j · LangChain · FastAPI · Docker · GitHub Actions
 
 ## Highlights
 
-- **Corpus and knowledge graph:** 11,847 human emails and 9,380 Jira events become 22,138 retrievable documents and a graph of 24,376 nodes and 54,127 relationships, every edge traceable to its source chunks.
-- **Entity resolution:** a deterministic resolver for people and components scores **B³ F1 0.965** (precision 1.000) against **0.750** for exact-match merging.
-- **Evaluation set:** 379 questions across five types (single-hop, inference, comparison, temporal, and unanswerable "null" questions), reviewed against their source emails and split into a tuning set (76) and a held-out test set (303).
-- **Result:** on 176 held-out multi-hop questions, graph retrieval delivered every needed document **11 points more often** than vector search (45% vs 34%, 95% CI +4 to +19), with no loss on single-hop questions.
+- **Result:** on 176 held-out multi-hop questions, graph retrieval delivered every needed document **11 points more often** than vector search (45% vs 34%, 95% CI +4 to +19), with no loss on single-hop questions
+- **Knowledge graph:** 11,847 emails and 9,380 Jira events become a graph of 24,376 nodes and 54,127 relationships, every edge traceable to its source text
+- **Entity resolution:** a deterministic resolver scores **B³ F1 0.965** with zero wrong merges, against **0.750** for exact-match merging
+- **Evaluation:** 379 questions reviewed against their source emails, with a 303-question held-out test set run once
 
 ## Architecture
 
 ```mermaid
 flowchart LR
-    A[mbox archives<br/>dev@ 2023-2025] --> B[Ingest<br/>parse, clean, thread, chunk]
-    B --> P[(Postgres + pgvector<br/>emails, documents, mentions)]
-    B --> C[Extract<br/>rules + LLM batch]
-    C --> P
-    P --> D[Resolve<br/>exact or user resolver]
-    D --> E[Build graph]
-    E --> N[(Neo4j<br/>provenance on every edge)]
-    P --> F[Index<br/>embed chunks and node names]
-    F --> P
-    P --> V[Vector retriever]
-    N --> G[Graph retriever]
-    P --> G
-    V --> H[Shared answer chain<br/>same model, prompt, 4k budget]
-    G --> H
-    H --> I[Eval<br/>LLM judge, bootstrap CIs, report]
-    H --> J[FastAPI /ask]
+    subgraph Build["Offline build"]
+        A[Mailing list + Jira<br/>2023–2025] --> B[Ingest<br/>clean, thread, chunk]
+        B --> C[Extract<br/>rules + LLM]
+        C --> D[Resolve entities]
+        D --> E[(Neo4j<br/>knowledge graph)]
+        B --> F[(Postgres + pgvector<br/>chunks + embeddings)]
+    end
+    subgraph Query["Query time"]
+        Q[Question] --> V[Vector retriever]
+        Q --> G[Graph retriever]
+        V --> H[Shared answer chain<br/>same model, prompt, 4k budget]
+        G --> H
+        H --> R[Answer + citations]
+    end
+    F --> V
+    F --> G
+    E --> G
 ```
 
 ## How it works
 
-**Ingestion and cleaning.** Monthly mbox archives are parsed. Quoted replies, signatures, stack traces, patches and log dumps are stripped or collapsed; emails are threaded across months and chunked to at most 500 tokens. Jira notification mails are parsed into structured events, and automated mail is kept out of the human corpus.
+- **Ingestion:** quoted replies, signatures, stack traces and patches are stripped; emails are threaded and chunked to 500 tokens; Jira notifications become structured events
+- **Extraction:** IDs and Jira events are parsed by rule; an LLM extracts only people, components and relations such as *proposed*, *voted* and *blocks*, through the Batches API with caching and a cost guard
+- **Entity resolution:** mentions like "Andrew Schofield", "Andrew" and an email address are merged into one person by rules, never guessed; ambiguous names stay unresolved
+- **Graph:** every edge stores the IDs of the chunks that justify it, so the graph retrieves source text, not summaries
 
-**Extraction.** Headers, Jira events and IDs (KIPs, tickets, releases) are extracted by rule. An LLM extracts only what rules cannot: mentions of people and components, and relations such as *proposed*, *voted*, *reviewed*, *blocks*, *affects*. Extraction runs through the Message Batches API with a per-email cache, persisted batch IDs (a crash never loses paid results), and a cost guard that prints an estimate before spending.
+```mermaid
+flowchart LR
+    P((Person)) -->|PROPOSED · VOTED · REVIEWED| K((KIP))
+    P -->|FILED · RESOLVED| T((JiraTicket))
+    P -->|SENT| M((Email))
+    M -->|MENTIONS| K
+    M -->|MENTIONS| T
+    M -->|MENTIONS| R((Release))
+    T -->|FIX_VERSION · BLOCKS| R
+    K -->|BLOCKS| R
+    K -->|AFFECTS| C((Component))
+    T -->|AFFECTS| C
+    K -->|DEPENDS_ON · SUPERSEDES| K
+```
 
-**Entity resolution.** `src/kgrag/resolve/` merges Person and Component mentions into entities, deterministically and without LLM calls. Components are normalised (case, hyphens, product prefixes, package prefixes, plurals, versioned spellings). People are resolved in two steps: strong identities first (shared address, same normalised full name with nicknames and middle initials ignored, abbreviated headers matched to the one full name that fits, single-letter misspellings), then every mention is attached, with first-name-only mentions resolved from the email they appear in. Sign-offs mean the sender; greetings never do. Anything still ambiguous stays unresolved, because a missed link costs recall while a wrong merge corrupts the graph. Scored on 188 hand-labelled mentions of 22 entities (13 people, 9 components):
+### Graph retrieval
+
+```mermaid
+flowchart LR
+    Q[Question] --> L[Link<br/>IDs and names<br/>become seeds]
+    L --> W[Walk<br/>2 hops in Neo4j]
+    W --> B[Doc bridge<br/>follow KIPs and tickets<br/>the best emails mention]
+    B --> R[Rank<br/>graph score +<br/>embedding similarity]
+    R --> P[Pack<br/>4,000-token budget]
+```
+
+Multi-hop questions often describe a KIP only through another discussion ("the ticket Colin cited in the vote"), which puts the answer three hops from anything named in the question. The doc-bridge step handles this: it pivots on the best-matching emails and walks from the KIPs and tickets those emails mention. It came from tracing misses during development, where 42% of the needed documents sat beyond a two-hop walk.
+
+## Entity resolution
+
+Scored on 188 hand-labelled mentions of 22 people and components:
 
 | Resolver | B³ precision | B³ recall | B³ F1 |
 | --- | --- | --- | --- |
 | Exact match (baseline) | 0.991 | 0.603 | 0.750 |
 | **Kafka Atlas resolver** | **1.000** | **0.933** | **0.965** |
 
-**Graph build.** Resolved entities become Person, Component, KIP, JiraTicket, Release and Email nodes; relations become typed edges (PROPOSED, VOTED, REVIEWED, FILED, RESOLVED, BLOCKS, AFFECTS, …). Every edge carries `source_doc_ids`, the chunks that justify it, so graph retrieval returns evidence rather than graph summaries. A metadata node records the resolver and a config hash, so evaluation refuses a mismatched graph.
+Precision is kept at 1.000 by design: a missed link costs a little recall, while a wrong merge attaches one engineer's votes and emails to someone else.
 
-**Graph retrieval.** `src/kgrag/retrieve/graph_retriever.py`, with no LLM calls and deterministic output:
+## Evaluation
 
-1. **Link.** The question's KIP, ticket and release IDs and its names become weighted seeds.
-2. **Walk.** From each seed it walks up to two hops, one batched Cypher query per hop, with edge caps enforced inside Cypher so hub nodes never cross the wire. A path's weight combines seed trust, edge type, extractor confidence and per-hop decay, with boosts for edge types the question asks about ("who voted" favours VOTED) and for bridges between seeds.
-3. **Doc bridge.** Multi-hop questions often identify a KIP only through another discussion ("the KIP Jane said was blocked by…"), which puts the answer three hops from anything named in the question. The retriever pivots on its best first-pass documents and the question's best vector hits, and walks from the KIPs and tickets *those* documents mention.
-4. **Rank and pack.** A chunk's score sums its best support from each seed, so chunks connecting several seeds win. A hybrid rerank adds embedding similarity, results are diversified across seeds, and evidence is packed into the same 4,000-token budget the baseline uses.
-
-All knobs live in `GraphRetrieverConfig`. A `graph-only` configuration turns off every use of embeddings, isolating what the graph contributes on its own.
-
-**Vector baseline.** Email and Jira chunks embedded with Voyage into pgvector; top-k nearest neighbours packed into the same budget.
-
-**Shared answer chain.** Both systems feed the same chain: one model, one prompt, the same evidence budget, structured output with cited document IDs and an explicit "insufficient evidence" option.
-
-## Evaluation design
-
-**Question set.** Built with the MultiHop-RAG recipe. Evidence is sampled from thread and ID links using headers and regexes only, never from the graph, so the question set does not favour either system. Questions are drafted by an LLM, then filtered by deterministic checks (single ask, length, date share, giveaways such as a question that reuses the linked ticket's title) and LLM checks that every gold document is actually needed. Every surviving question was then **LLM-reviewed against its source emails** (kept, edited or dropped, with a logged reason), and **a random sample was human-verified** (50 of 50 decisions confirmed).
+```mermaid
+flowchart LR
+    S[Sample linked emails<br/>by thread and ID,<br/>never by the graph] --> D[LLM drafts<br/>questions]
+    D --> C[Automatic checks<br/>giveaways, compound asks,<br/>every source needed]
+    C --> V[Review against<br/>source emails<br/>+ human spot-check]
+    V --> T[76 tuning · 303 test]
+```
 
 | Type | What it tests | Questions |
 | --- | --- | --- |
 | Single-hop | One fact from one document | 121 |
-| Inference | A bridge: one email identifies a KIP or ticket, another states the answer | 166 |
+| Inference | One email identifies a KIP or ticket, another states the answer | 166 |
 | Comparison | Two related KIPs or tickets compared on substance | 48 |
-| Temporal | How a proposal changed between its first version and a revision | 6 |
-| Null | Plausible but unanswerable from the list; the system should decline | 38 |
-| **Total** | 76 tuning (dev) · 303 held-out (test) | **379** |
+| Temporal | How a proposal changed after review | 6 |
+| Null | Unanswerable from the list; the system should decline | 38 |
 
-**Protocol.** Retriever tuning uses only the dev split. Each system runs on the test split once; a run where more than 10% of questions fail (for example an API outage) is flagged degraded and does not count. Metrics are source recall, full-evidence rate, cost and latency, with 95% bootstrap confidence intervals and paired differences against the vector baseline.
-
-## Example
-
-A multi-hop question from the held-out test set. Answering it needs two documents: the release-vote email that names the blocker, and the Jira record of who resolved it. The question names neither the ticket nor the resolver.
-
-> **Who resolved the ticket that was flagged as a blocker during the 3.4.0 RC0 vote, requiring a new release candidate?**
-
-**Vector RAG** found the vote email but not the Jira record:
-
-> The sources don't say who resolved it. Colin McCabe's 3.4.0 RC0 vote email names the blocker as KAFKA-14618 … None of the sources include a resolution record for KAFKA-14618.
-
-**Graph RAG** linked `3.4.0` from the question, pivoted on the vote email, and followed the ticket it mentions to its Jira record:
-
-```
-3.4.0 ◀─MENTIONS── vote email ──mentions──▶ KAFKA-14618 ──FIX_VERSION──▶ 3.4.0
-                                                 └── Jira: resolved by Colin McCabe
-```
-
-> Colin McCabe resolved it. During the 3.4.0 RC0 vote, Colin flagged KAFKA-14618 (Off by one error in generated snapshot IDs causes misaligned fetching) as a blocker that required a new RC. Jira shows Colin McCabe resolved KAFKA-14618 as Fixed in 3.4.0 on 2023-01-13.
+Questions were drafted by an LLM, **LLM-reviewed against their source emails**, and **a random sample was human-verified** (50 of 50 decisions confirmed). The retriever was tuned only on the tuning split, and each system ran on the test split once.
 
 ## Results
 
-Held-out test split: 303 questions, both systems answered every question with no errors, and differences are paired over the same questions. Cells are means with 95% bootstrap confidence intervals.
+Held-out test split, 303 questions, both systems paired on the same questions with 95% bootstrap confidence intervals:
 
 | Multi-hop (176 questions) | Vector | Graph | Graph − vector |
 | --- | --- | --- | --- |
-| **Full-evidence rate** (every gold document retrieved) | 0.34 | 0.45 | **+0.11 [+0.04, +0.19]** |
+| **Full-evidence rate** (every needed document retrieved) | 0.34 | 0.45 | **+0.11 [+0.04, +0.19]** |
 | Source recall | 0.56 | 0.61 | +0.05 [−0.01, +0.11] |
 
 | Full-evidence rate by type | Vector | Graph |
@@ -118,21 +123,23 @@ Held-out test split: 303 questions, both systems answered every question with no
 | Comparison (38) | 0.50 | 0.66 |
 | Temporal (5) | 0.80 | 1.00 |
 
-Graph retrieval's clearest gain is in assembling complete evidence for multi-hop questions: 11 points more often, with an interval that excludes zero. The gain holds across every multi-hop type, while single-hop retrieval is unchanged. The graph adds about 0.5 s of latency per question (4.6 s vs 4.1 s end to end) at the same answer cost.
+Graph retrieval assembles complete evidence for multi-hop questions 11 points more often, and the gain holds across every multi-hop type, with single-hop retrieval unchanged. It adds about 0.5 s of latency per question.
 
-The biggest design change came from tracing misses on the tuning split: bridge questions name only a person, and 42% of the needed documents sat three hops away, beyond the walk. The doc-bridge step was the fix.
+## Example
 
-## Data
+A held-out multi-hop question. Answering it needs the release-vote email that names the blocker and the Jira record of who resolved it; the question names neither.
 
-| Measure | Count |
-| --- | --- |
-| Months ingested | 36 (Jan 2023 – Dec 2025) |
-| Human-written emails | 11,847 |
-| Structured Jira events | 9,380 |
-| Retrievable documents (email chunks ≤ 500 tokens + Jira events) | 22,138 |
-| LLM-extracted relations | 14,646 |
-| Graph | 24,376 nodes, 54,127 relationships |
-| Node counts | 4,694 Person · 751 Component · 700 KIP · 6,088 JiraTicket · 296 Release · 11,847 Email |
+> **Who resolved the ticket that was flagged as a blocker during the 3.4.0 RC0 vote, requiring a new release candidate?**
+
+```mermaid
+flowchart LR
+    Q["Question names<br/>3.4.0"] --> E["3.4.0 RC0<br/>vote email"]
+    E -->|mentions| T["KAFKA-14618"]
+    T -->|Jira record| J["Resolved by<br/>Colin McCabe"]
+```
+
+- **Vector RAG** found the vote email but not the Jira record: *"The sources don't say who resolved it."*
+- **Graph RAG** followed the ticket the vote email mentions to its Jira record: *"Colin McCabe resolved it… Jira shows Colin McCabe resolved KAFKA-14618 as Fixed in 3.4.0 on 2023-01-13."*
 
 ## Quickstart
 
@@ -149,11 +156,6 @@ uv run kgrag resolve --resolver user
 uv run kgrag build --resolver user
 uv run kgrag index
 
-uv run kgrag questions draft --pilot      # draft a few questions per type
-uv run kgrag questions review             # keep / edit / drop each draft
-uv run kgrag questions split              # 20% dev / 80% test
-
-uv run kgrag ablate --split dev --resolver user
 uv run kgrag eval --system vector --split dev
 uv run kgrag eval --system graph --resolver user --split dev
 uv run kgrag report results/*.json --split dev
@@ -161,15 +163,12 @@ uv run kgrag report results/*.json --split dev
 uv run kgrag serve                        # FastAPI: POST /ask {"question", "system"}
 ```
 
-Evaluation runs a freshness preflight before any question and refuses, naming the command to run, when a gold document is missing, the index was embedded with another model, or the graph was built from a different resolution.
-
 ## Limitations
 
-- One corpus and one time window; results may not generalise to other projects or periods.
-- Questions are drafted from header- and regex-linked evidence, so they over-represent relations visible through explicit IDs and threads.
-- Temporal questions are scarce (6): Kafka design revisions mostly live on the wiki, and the list only links to them.
-- Ambiguous first names ("Chris", "David") are left unresolved rather than guessed, so some people's mentions stay split across nodes.
-- dev@ carries only Jira created / resolved / reopened notifications, so ticket assignments are not in the graph.
+- One corpus and one time window; results may not generalise to other projects or periods
+- Questions are drafted from header- and ID-linked evidence, so they over-represent relations visible through explicit IDs and threads
+- Temporal questions are scarce (6): Kafka design revisions mostly live on the wiki, and the list only links to them
+- Ambiguous first names ("Chris", "David") are left unresolved rather than guessed
 
 ## Testing
 
@@ -178,23 +177,20 @@ uv run pytest                       # everything not marked live
 uv run pytest -m "not integration"  # unit tests only, no Docker
 ```
 
-Around 750 tests. Markers: `integration` (Postgres and Neo4j via testcontainers), `quality` (non-blocking quality checks), `live` (calls paid APIs; never run by default). An offline end-to-end smoke test ingests a fixture slice, extracts, resolves, builds, indexes, evaluates both systems with fake models and renders the report. GitHub Actions runs the suite on every push and pull request.
+744 tests, including Postgres and Neo4j integration tests via testcontainers and an offline end-to-end smoke test. GitHub Actions runs the suite on every push.
 
 ## Project layout
 
 ```
 src/kgrag/
-  ingest/     fetch, parse, clean, Jira parser, ingest pipeline
-  extract/    regex IDs, LLM extraction (batch + cache), persistence
-  resolve/    exact-match baseline and the entity resolver (names, people, components)
-  graph/      Neo4j build, knowledge-graph access, graph checks
-  retrieve/   embeddings, index, vector and graph retrievers, ablations
+  ingest/     parse, clean, thread, chunk; Jira parser
+  extract/    rule and LLM extraction
+  resolve/    entity resolution
+  graph/      Neo4j build and access
+  retrieve/   vector and graph retrievers
   answer/     shared answer chain
-  questions/  evidence sampling, drafting, review, splits
-  eval/       runner, judge, metrics, bootstrap CIs, report
+  questions/  evaluation question pipeline
+  eval/       runner, metrics, confidence intervals, report
   api/        FastAPI service
-  store/      Postgres access
-migrations/   SQL schema
-scripts/      fixtures and embedding recording
-tests/        unit + Docker integration tests, fixtures
+tests/        unit, integration and end-to-end tests
 ```
