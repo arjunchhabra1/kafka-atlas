@@ -1,5 +1,7 @@
 # Kafka Atlas
 
+[![CI](https://github.com/arjunchhabra1/kafka-atlas/actions/workflows/ci.yml/badge.svg)](https://github.com/arjunchhabra1/kafka-atlas/actions/workflows/ci.yml) [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+
 An engineering knowledge assistant over the Apache Kafka developer mailing list. It answers questions such as *"Which release fixed the ticket Colin McCabe cited when voting −1 on 3.6.2 RC1?"* with cited sources, and it is built to answer one question with a controlled experiment: **does a knowledge graph retrieve better than plain vector search when the answer spans several documents?**
 
 The corpus is three years (2023–2025) of `dev@kafka.apache.org` plus its Jira activity: a public stand-in for the Slack, email and ticket history that companies index internally. Two systems answer the same questions with the same model, prompt and context budget, so retrieval is the only thing that differs:
@@ -80,6 +82,25 @@ All knobs live in `GraphRetrieverConfig`. A `graph-only` configuration turns off
 | **Total** | 76 tuning (dev) · 303 held-out (test) | **379** |
 
 **Protocol.** Retriever tuning uses only the dev split. Each system runs on the test split once; a run where more than 10% of questions fail (for example an API outage) is flagged degraded and does not count. Metrics are source recall, full-evidence rate, cost and latency, with 95% bootstrap confidence intervals and paired differences against the vector baseline.
+
+## Example
+
+A multi-hop question from the held-out test set. Answering it needs two documents: the release-vote email that names the blocker, and the Jira record of who resolved it. The question names neither the ticket nor the resolver.
+
+> **Who resolved the ticket that was flagged as a blocker during the 3.4.0 RC0 vote, requiring a new release candidate?**
+
+**Vector RAG** found the vote email but not the Jira record:
+
+> The sources don't say who resolved it. Colin McCabe's 3.4.0 RC0 vote email names the blocker as KAFKA-14618 … None of the sources include a resolution record for KAFKA-14618.
+
+**Graph RAG** linked `3.4.0` from the question, pivoted on the vote email, and followed the ticket it mentions to its Jira record:
+
+```
+3.4.0 ◀─MENTIONS── vote email ──mentions──▶ KAFKA-14618 ──FIX_VERSION──▶ 3.4.0
+                                                 └── Jira: resolved by Colin McCabe
+```
+
+> Colin McCabe resolved it. During the 3.4.0 RC0 vote, Colin flagged KAFKA-14618 (Off by one error in generated snapshot IDs causes misaligned fetching) as a blocker that required a new RC. Jira shows Colin McCabe resolved KAFKA-14618 as Fixed in 3.4.0 on 2023-01-13.
 
 ## Results
 
