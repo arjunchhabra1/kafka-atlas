@@ -85,8 +85,6 @@ Scored on 188 hand-labelled mentions of 22 people and components:
 | Exact match (baseline) | 0.991 | 0.603 | 0.750 |
 | **Kafka Atlas resolver** | **1.000** | **0.933** | **0.965** |
 
-Precision is kept at 1.000 by design: a missed link costs a little recall, while a wrong merge attaches one engineer's votes and emails to someone else.
-
 ## Evaluation
 
 ```mermaid
@@ -122,8 +120,6 @@ Held-out test split, 303 questions, both systems paired on the same questions wi
 | Inference (133) | 0.27 | 0.37 |
 | Comparison (38) | 0.50 | 0.66 |
 | Temporal (5) | 0.80 | 1.00 |
-
-Graph retrieval assembles complete evidence for multi-hop questions 11 points more often, and the gain holds across every multi-hop type, with single-hop retrieval unchanged. It adds about 0.5 s of latency per question.
 
 ## Example
 
