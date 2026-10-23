@@ -99,18 +99,7 @@ Held-out test split: 303 questions, both systems answered every question with no
 
 Graph retrieval's clearest gain is in assembling complete evidence for multi-hop questions: 11 points more often, with an interval that excludes zero. The gain holds across every multi-hop type, while single-hop retrieval is unchanged. The graph adds about 0.5 s of latency per question (4.6 s vs 4.1 s end to end) at the same answer cost.
 
-## Retrieval on the dev split
-
-Gold-source recall within the 4,000-token budget on the tuning split (68 questions with gold documents; null questions have none). These are the numbers the retriever was developed against:
-
-| Question type | n | Graph (hybrid) | Graph-only | Vector |
-| --- | --- | --- | --- | --- |
-| Single-hop | 24 | 0.88 | 0.50 | **0.96** |
-| Inference | 33 | **0.58** | 0.30 | 0.41 |
-| Comparison | 10 | **0.85** | **0.85** | 0.60 |
-| **Multi-hop overall** | 44 | **0.65** | 0.44 | 0.47 |
-
-The first ablation put the graph retriever *behind* vector search on inference questions (0.27 vs 0.41). Tracing each miss showed why: those questions name only a person, and 42% of the gold documents sat three hops away, beyond the walk. The doc-bridge step above was the fix, and it raised dev multi-hop recall from 0.43 to 0.65. The `graph-only` column shows the graph's own contribution: it wins on comparison questions, while the strongest system on bridge questions combines the graph with vector hits. Vector search remains best on single-hop questions, where the answer sits in one well-matched chunk.
+The biggest design change came from tracing misses on the tuning split: bridge questions name only a person, and 42% of the needed documents sat three hops away, beyond the walk. The doc-bridge step was the fix.
 
 ## Data
 
@@ -162,7 +151,6 @@ The API is containerised and deployable to Cloud Run with Cloud SQL Postgres (pg
 - One corpus and one time window; results may not generalise to other projects or periods.
 - Questions are drafted from header- and regex-linked evidence, so they over-represent relations visible through explicit IDs and threads.
 - Temporal questions are scarce (6): Kafka design revisions mostly live on the wiki, and the list only links to them.
-- The dev split is small (44 multi-hop questions), so dev numbers carry wide uncertainty; the held-out test split is the measure.
 - Ambiguous first names ("Chris", "David") are left unresolved rather than guessed, so some people's mentions stay split across nodes.
 - dev@ carries only Jira created / resolved / reopened notifications, so ticket assignments are not in the graph.
 
