@@ -7,8 +7,6 @@ The corpus is three years (2023–2025) of `dev@kafka.apache.org` plus its Jira 
 - **Vector RAG baseline:** LangChain + pgvector, nearest-neighbour search over email and Jira chunks.
 - **Graph RAG:** an LLM-extracted knowledge graph in Neo4j, queried through entity linking and multi-hop traversal, with every edge pointing back to the chunks that justify it.
 
-Design write-up: [docs/DESIGN.md](docs/DESIGN.md).
-
 **Stack:** Python 3.12 · Claude Sonnet 5.5 (extraction, question drafting, answering) and Claude Opus 5.5 (judge) · Voyage embeddings · Postgres + pgvector · Neo4j · LangChain · FastAPI · Docker · GCP (Cloud Run, Cloud SQL) · Langfuse · GitHub Actions
 
 ## Highlights
@@ -85,7 +83,7 @@ All knobs live in `GraphRetrieverConfig`. A `graph-only` configuration turns off
 
 ## Results
 
-Held-out test split: 303 questions, both systems answered every question with no errors, and differences are paired over the same questions. Cells are means with 95% bootstrap confidence intervals. Full report: [docs/RESULTS.md](docs/RESULTS.md).
+Held-out test split: 303 questions, both systems answered every question with no errors, and differences are paired over the same questions. Cells are means with 95% bootstrap confidence intervals.
 
 | Multi-hop (176 questions) | Vector | Graph | Graph − vector |
 | --- | --- | --- | --- |
@@ -193,6 +191,6 @@ src/kgrag/
   store/      Postgres access
 migrations/   SQL schema
 scripts/      fixtures, embedding recording, cloud load and deploy
-docs/         design doc, test results, deployment guide
+docs/         deployment guide
 tests/        unit + Docker integration tests, fixtures
 ```
