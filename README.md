@@ -151,7 +151,6 @@ The API is containerised and deployable to Cloud Run with Cloud SQL Postgres (pg
 - One corpus and one time window; results may not generalise to other projects or periods.
 - Questions are drafted from header- and regex-linked evidence, so they over-represent relations visible through explicit IDs and threads.
 - Temporal questions are scarce (6): Kafka design revisions mostly live on the wiki, and the list only links to them.
-- The dev split is small (44 multi-hop questions), so dev numbers carry wide uncertainty; the held-out test split is the measure.
 - Ambiguous first names ("Chris", "David") are left unresolved rather than guessed, so some people's mentions stay split across nodes.
 - dev@ carries only Jira created / resolved / reopened notifications, so ticket assignments are not in the graph.
 
