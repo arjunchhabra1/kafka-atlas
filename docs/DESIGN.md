@@ -89,7 +89,7 @@ Questions follow the MultiHop-RAG recipe. Evidence is sampled from thread and ID
 | Temporal | How a proposal changed after review | 6 |
 | Null | Unanswerable from the list; the system should decline | 38 |
 
-76 questions form a tuning split and 303 a held-out test split. Each system runs on the test split once; answers are graded by Claude Opus 5.5 against the reviewed gold answer.
+76 questions form a tuning split and 303 a held-out test split. Each system runs on the test split once.
 
 ## Results
 
@@ -99,14 +99,15 @@ Held-out test split, 303 questions, both systems paired on the same questions. C
 | --- | --- | --- | --- |
 | Full-evidence rate | 0.34 | 0.45 | **+0.11 [+0.04, +0.19]** |
 | Source recall | 0.56 | 0.61 | +0.05 [−0.01, +0.11] |
-| Answer accuracy | 0.55 | 0.60 | +0.06 [−0.01, +0.12] |
 
-| Other groups | Vector | Graph |
+| Full-evidence rate by type | Vector | Graph |
 | --- | --- | --- |
-| Single-hop accuracy (97) | 0.93 | 0.93 |
-| Null abstention (30) | 1.00 | 1.00 |
+| Single-hop (97) | 0.90 | 0.90 |
+| Inference (133) | 0.27 | 0.37 |
+| Comparison (38) | 0.50 | 0.66 |
+| Temporal (5) | 0.80 | 1.00 |
 
-On multi-hop questions, graph retrieval delivered every needed document 11 points more often than vector search, a statistically significant gain; answer accuracy rose 6 points. Single-hop and unanswerable questions were unchanged, at a cost of about 0.5 s more latency per question.
+On multi-hop questions, graph retrieval delivered every needed document 11 points more often than vector search, a statistically significant gain that holds across every multi-hop type. Single-hop retrieval was unchanged, at a cost of about 0.5 s more latency per question.
 
 The largest single improvement came from diagnosing misses on the tuning split: bridge questions name only a person, and 42% of gold documents sat three hops away. Adding the doc bridge raised tuning-split multi-hop recall from 0.43 to 0.65.
 

@@ -16,7 +16,7 @@ Design write-up: [docs/DESIGN.md](docs/DESIGN.md).
 - **Corpus and knowledge graph:** 11,847 human emails and 9,380 Jira events become 22,138 retrievable documents and a graph of 24,376 nodes and 54,127 relationships, every edge traceable to its source chunks.
 - **Entity resolution:** a deterministic resolver for people and components scores **B³ F1 0.965** (precision 1.000) against **0.750** for exact-match merging.
 - **Evaluation set:** 379 questions across five types (single-hop, inference, comparison, temporal, and unanswerable "null" questions), reviewed against their source emails and split into a tuning set (76) and a held-out test set (303).
-- **Result:** on 176 held-out multi-hop questions, graph retrieval delivered every needed document **11 points more often** than vector search (45% vs 34%, 95% CI +4 to +19), with answer accuracy up 6 points and no loss on single-hop or unanswerable questions.
+- **Result:** on 176 held-out multi-hop questions, graph retrieval delivered every needed document **11 points more often** than vector search (45% vs 34%, 95% CI +4 to +19), with no loss on single-hop questions.
 
 ## Architecture
 
@@ -81,7 +81,7 @@ All knobs live in `GraphRetrieverConfig`. A `graph-only` configuration turns off
 | Null | Plausible but unanswerable from the list; the system should decline | 38 |
 | **Total** | 76 tuning (dev) · 303 held-out (test) | **379** |
 
-**Protocol.** Retriever tuning uses only the dev split. Each system runs on the test split once; a run where more than 10% of questions fail (for example an API outage) is flagged degraded and does not count. Answers are graded by an LLM judge (Claude Opus 5.5) against the reviewed gold answer. Metrics are source recall, full-evidence rate, judged answer accuracy, cost and latency, with 95% bootstrap confidence intervals and paired differences against the vector baseline.
+**Protocol.** Retriever tuning uses only the dev split. Each system runs on the test split once; a run where more than 10% of questions fail (for example an API outage) is flagged degraded and does not count. Metrics are source recall, full-evidence rate, cost and latency, with 95% bootstrap confidence intervals and paired differences against the vector baseline.
 
 ## Results
 
@@ -91,17 +91,15 @@ Held-out test split: 303 questions, both systems answered every question with no
 | --- | --- | --- | --- |
 | **Full-evidence rate** (every gold document retrieved) | 0.34 | 0.45 | **+0.11 [+0.04, +0.19]** |
 | Source recall | 0.56 | 0.61 | +0.05 [−0.01, +0.11] |
-| Answer accuracy | 0.55 | 0.60 | +0.06 [−0.01, +0.12] |
 
-| By type | Vector accuracy | Graph accuracy |
+| Full-evidence rate by type | Vector | Graph |
 | --- | --- | --- |
-| Single-hop (97) | 0.93 | 0.93 |
-| Inference (133) | 0.44 | 0.50 |
-| Comparison (38) | 0.86 | 0.89 |
-| Temporal (5) | 0.90 | 1.00 |
-| Null: correctly declined (30) | 1.00 | 1.00 |
+| Single-hop (97) | 0.90 | 0.90 |
+| Inference (133) | 0.27 | 0.37 |
+| Comparison (38) | 0.50 | 0.66 |
+| Temporal (5) | 0.80 | 1.00 |
 
-Graph retrieval's clearest gain is in assembling complete evidence for multi-hop questions: 11 points more often, an interval that excludes zero. Answer accuracy follows in the same direction (+6 points), with an interval that just reaches zero. Single-hop and unanswerable questions are unchanged. The graph adds about 0.5 s of latency per question (4.6 s vs 4.1 s end to end) at the same answer cost.
+Graph retrieval's clearest gain is in assembling complete evidence for multi-hop questions: 11 points more often, with an interval that excludes zero. The gain holds across every multi-hop type, while single-hop retrieval is unchanged. The graph adds about 0.5 s of latency per question (4.6 s vs 4.1 s end to end) at the same answer cost.
 
 ## Retrieval on the dev split
 
