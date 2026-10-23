@@ -9,7 +9,7 @@ The corpus is three years (2023–2025) of `dev@kafka.apache.org` plus its Jira 
 - **Vector RAG baseline:** LangChain + pgvector, nearest-neighbour search over email and Jira chunks.
 - **Graph RAG:** an LLM-extracted knowledge graph in Neo4j, queried through entity linking and multi-hop traversal, with every edge pointing back to the chunks that justify it.
 
-**Stack:** Python 3.12 · Claude Sonnet 5.5 (extraction, question drafting, answering) and Claude Opus 5.5 (judge) · Voyage embeddings · Postgres + pgvector · Neo4j · LangChain · FastAPI · Docker · GCP (Cloud Run, Cloud SQL) · Langfuse · GitHub Actions
+**Stack:** Python 3.12 · Claude Sonnet 5.5 (extraction, question drafting, answering) and Claude Opus 5.5 (judge) · Voyage embeddings · Postgres + pgvector · Neo4j · LangChain · FastAPI · Docker · GitHub Actions
 
 ## Highlights
 
@@ -163,10 +163,6 @@ uv run kgrag serve                        # FastAPI: POST /ask {"question", "sys
 
 Evaluation runs a freshness preflight before any question and refuses, naming the command to run, when a gold document is missing, the index was embedded with another model, or the graph was built from a different resolution.
 
-## Deployment
-
-The API is containerised and deployable to Cloud Run with Cloud SQL Postgres (pgvector), AuraDB for the graph, Secret Manager for keys and Langfuse for traces. `/ask` requires an `X-API-Key` header and the service refuses to start in cloud mode without one; instance and concurrency caps bound spend. Steps and cost notes: [docs/DEPLOY.md](docs/DEPLOY.md).
-
 ## Limitations
 
 - One corpus and one time window; results may not generalise to other projects or periods.
@@ -199,7 +195,6 @@ src/kgrag/
   api/        FastAPI service
   store/      Postgres access
 migrations/   SQL schema
-scripts/      fixtures, embedding recording, cloud load and deploy
-docs/         deployment guide
+scripts/      fixtures and embedding recording
 tests/        unit + Docker integration tests, fixtures
 ```
