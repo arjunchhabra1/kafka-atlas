@@ -7,6 +7,8 @@ The corpus is three years (2023–2025) of `dev@kafka.apache.org` plus its Jira 
 - **Vector RAG baseline:** LangChain + pgvector, nearest-neighbour search over email and Jira chunks.
 - **Graph RAG:** an LLM-extracted knowledge graph in Neo4j, queried through entity linking and multi-hop traversal, with every edge pointing back to the chunks that justify it.
 
+Design write-up: [docs/DESIGN.md](docs/DESIGN.md).
+
 **Stack:** Python 3.12 · Claude Sonnet 5.5 (extraction, question drafting, answering) and Claude Opus 5.5 (judge) · Voyage embeddings · Postgres + pgvector · Neo4j · LangChain · FastAPI · Docker · GCP (Cloud Run, Cloud SQL) · Langfuse · GitHub Actions
 
 ## Highlights
@@ -14,7 +16,7 @@ The corpus is three years (2023–2025) of `dev@kafka.apache.org` plus its Jira 
 - **Corpus and knowledge graph:** 11,847 human emails and 9,380 Jira events become 22,138 retrievable documents and a graph of 24,376 nodes and 54,127 relationships, every edge traceable to its source chunks.
 - **Entity resolution:** a deterministic resolver for people and components scores **B³ F1 0.965** (precision 1.000) against **0.750** for exact-match merging.
 - **Evaluation set:** 379 questions across five types (single-hop, inference, comparison, temporal, and unanswerable "null" questions), reviewed against their source emails and split into a tuning set (76) and a held-out test set (303).
-- **Multi-hop retrieval:** on the tuning set, hybrid graph retrieval finds **65%** of the gold source documents for multi-hop questions, against **47%** for vector search.
+- **Result:** on 176 held-out multi-hop questions, graph retrieval delivered every needed document **11 points more often** than vector search (45% vs 34%, 95% CI +4 to +19), with no loss on single-hop questions.
 
 ## Architecture
 
@@ -79,11 +81,29 @@ All knobs live in `GraphRetrieverConfig`. A `graph-only` configuration turns off
 | Null | Plausible but unanswerable from the list; the system should decline | 38 |
 | **Total** | 76 tuning (dev) · 303 held-out (test) | **379** |
 
-**Protocol.** Retriever tuning uses only the dev split. Each system runs on the test split once; a run where more than 10% of questions fail (for example an API outage) is flagged degraded and does not count. Answers are graded by an LLM judge (Claude Opus 5.5) against the reviewed gold answer, and the judge is validated against human labels. Metrics are source recall, full-evidence rate, judged answer accuracy, cost and latency, with 95% bootstrap confidence intervals and paired differences against the vector baseline.
+**Protocol.** Retriever tuning uses only the dev split. Each system runs on the test split once; a run where more than 10% of questions fail (for example an API outage) is flagged degraded and does not count. Metrics are source recall, full-evidence rate, cost and latency, with 95% bootstrap confidence intervals and paired differences against the vector baseline.
+
+## Results
+
+Held-out test split: 303 questions, both systems answered every question with no errors, and differences are paired over the same questions. Cells are means with 95% bootstrap confidence intervals. Full report: [docs/RESULTS.md](docs/RESULTS.md).
+
+| Multi-hop (176 questions) | Vector | Graph | Graph − vector |
+| --- | --- | --- | --- |
+| **Full-evidence rate** (every gold document retrieved) | 0.34 | 0.45 | **+0.11 [+0.04, +0.19]** |
+| Source recall | 0.56 | 0.61 | +0.05 [−0.01, +0.11] |
+
+| Full-evidence rate by type | Vector | Graph |
+| --- | --- | --- |
+| Single-hop (97) | 0.90 | 0.90 |
+| Inference (133) | 0.27 | 0.37 |
+| Comparison (38) | 0.50 | 0.66 |
+| Temporal (5) | 0.80 | 1.00 |
+
+Graph retrieval's clearest gain is in assembling complete evidence for multi-hop questions: 11 points more often, with an interval that excludes zero. The gain holds across every multi-hop type, while single-hop retrieval is unchanged. The graph adds about 0.5 s of latency per question (4.6 s vs 4.1 s end to end) at the same answer cost.
 
 ## Retrieval on the dev split
 
-Gold-source recall within the 4,000-token budget (68 dev questions with gold documents; null questions have none):
+Gold-source recall within the 4,000-token budget on the tuning split (68 questions with gold documents; null questions have none). These are the numbers the retriever was developed against:
 
 | Question type | n | Graph (hybrid) | Graph-only | Vector |
 | --- | --- | --- | --- | --- |
@@ -173,6 +193,6 @@ src/kgrag/
   store/      Postgres access
 migrations/   SQL schema
 scripts/      fixtures, embedding recording, cloud load and deploy
-docs/         design spec, deployment guide
+docs/         design doc, test results, deployment guide
 tests/        unit + Docker integration tests, fixtures
 ```
