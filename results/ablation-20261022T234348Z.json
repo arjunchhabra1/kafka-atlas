@@ -1,0 +1,88 @@
+{
+  "header": {
+    "kind": "ablation",
+    "split": "dev",
+    "resolver": "user",
+    "budget_tokens": 4000,
+    "started_at": "2026-10-22T23:43:48.685219+00:00",
+    "finished_at": "2026-10-22T23:45:08.601321+00:00",
+    "n_questions": 68,
+    "configs": {
+      "hybrid": "7375a909a22a",
+      "graph-only": "aba4e2d72fb1"
+    },
+    "vector_baseline": true,
+    "graph_meta": {
+      "resolver": "user",
+      "built_at": "2026-10-21T05:45:01.867353+00:00"
+    }
+  },
+  "results": {
+    "hybrid": {
+      "recall": {
+        "all": 0.7279411764705882,
+        "comparison": 0.85,
+        "inference": 0.5757575757575758,
+        "multi-hop": 0.6477272727272727,
+        "single-hop": 0.875,
+        "single_hop": 0.875,
+        "temporal": 1.0
+      },
+      "n": {
+        "all": 68,
+        "comparison": 10,
+        "inference": 33,
+        "multi-hop": 44,
+        "single-hop": 24,
+        "single_hop": 24,
+        "temporal": 1
+      },
+      "unlinked_rate": 0.07352941176470588,
+      "fallback_rate": 0.0
+    },
+    "graph-only": {
+      "recall": {
+        "all": 0.4632352941176471,
+        "comparison": 0.85,
+        "inference": 0.30303030303030304,
+        "multi-hop": 0.4431818181818182,
+        "single-hop": 0.5,
+        "single_hop": 0.5,
+        "temporal": 1.0
+      },
+      "n": {
+        "all": 68,
+        "comparison": 10,
+        "inference": 33,
+        "multi-hop": 44,
+        "single-hop": 24,
+        "single_hop": 24,
+        "temporal": 1
+      },
+      "unlinked_rate": 0.07352941176470588,
+      "fallback_rate": 0.0
+    },
+    "vector": {
+      "recall": {
+        "all": 0.6397058823529411,
+        "comparison": 0.6,
+        "inference": 0.4090909090909091,
+        "multi-hop": 0.4659090909090909,
+        "single-hop": 0.9583333333333334,
+        "single_hop": 0.9583333333333334,
+        "temporal": 1.0
+      },
+      "n": {
+        "all": 68,
+        "comparison": 10,
+        "inference": 33,
+        "multi-hop": 44,
+        "single-hop": 24,
+        "single_hop": 24,
+        "temporal": 1
+      },
+      "unlinked_rate": null,
+      "fallback_rate": null
+    }
+  }
+}
